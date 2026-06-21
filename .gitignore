@@ -1,0 +1,13 @@
+.DS_Store
+
+# Ignore compiled Python bytecode and cache directories
+__pycache__/
+.pyc
+.pyo
+.pyd
+
+.venv
+.pytest_cache
+
+# Observatory runtime data (pcap captures and scan results)
+observatory/pqc-obs/

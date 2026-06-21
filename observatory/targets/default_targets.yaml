@@ -1,0 +1,130 @@
+# Default target list for the PQC Observatory
+#
+# Each entry must have at minimum a `hostname`.
+# Optional fields: port (default 443), category, is_active (default true), notes.
+#
+# Categories used for segmentation in the dashboard:
+#   cdn, hyperscaler, tech, finance, government, education, misc
+#
+# Add or remove targets by editing this file and running:
+#   observatory targets --sync
+
+targets:
+
+  # -------------------------------------------------------------------------
+  # Content Delivery Networks
+  # -------------------------------------------------------------------------
+  - hostname: cloudflare.com
+    category: cdn
+    notes: "Cloudflare — known early PQC adopter (X25519MLKEM768)"
+
+  - hostname: fastly.com
+    category: cdn
+    notes: "Fastly CDN"
+
+  - hostname: akamai.com
+    category: cdn
+    notes: "Akamai CDN"
+
+  # -------------------------------------------------------------------------
+  # Hyperscalers
+  # -------------------------------------------------------------------------
+  - hostname: aws.amazon.com
+    category: hyperscaler
+    notes: "Amazon Web Services"
+
+  - hostname: azure.microsoft.com
+    category: hyperscaler
+    notes: "Microsoft Azure"
+
+  - hostname: cloud.google.com
+    category: hyperscaler
+    notes: "Google Cloud Platform"
+
+  # -------------------------------------------------------------------------
+  # Technology / Early Adopters
+  # -------------------------------------------------------------------------
+  - hostname: google.com
+    category: tech
+    notes: "Google — extensive TLS experimentation history"
+
+  - hostname: facebook.com
+    category: tech
+    notes: "Meta / Facebook"
+
+  - hostname: github.com
+    category: tech
+    notes: "GitHub"
+
+  - hostname: mozilla.org
+    category: tech
+    notes: "Mozilla Foundation"
+
+  - hostname: apple.com
+    category: tech
+    notes: "Apple"
+
+  - hostname: openssl.org
+    category: tech
+    notes: "OpenSSL project homepage"
+
+  - hostname: letsencrypt.org
+    category: tech
+    notes: "Let's Encrypt CA"
+
+  # -------------------------------------------------------------------------
+  # Standards bodies & government
+  # -------------------------------------------------------------------------
+  - hostname: nist.gov
+    category: government
+    notes: "NIST — publisher of FIPS 203/204/205"
+
+  - hostname: cisa.gov
+    category: government
+    notes: "CISA — US cyber security agency"
+
+  - hostname: ncsc.gov.uk
+    category: government
+    notes: "UK National Cyber Security Centre"
+
+  - hostname: bsi.bund.de
+    category: government
+    notes: "German Federal Office for Information Security"
+
+  # -------------------------------------------------------------------------
+  # Financial institutions
+  # -------------------------------------------------------------------------
+  - hostname: visa.com
+    category: finance
+    notes: "Visa"
+
+  - hostname: mastercard.com
+    category: finance
+    notes: "Mastercard"
+
+  - hostname: jpmorgan.com
+    category: finance
+    notes: "JPMorgan Chase"
+
+  - hostname: hsbc.com
+    category: finance
+    notes: "HSBC"
+
+  # -------------------------------------------------------------------------
+  # Education / Research
+  # -------------------------------------------------------------------------
+  - hostname: mit.edu
+    category: education
+    notes: "MIT"
+
+  - hostname: stanford.edu
+    category: education
+    notes: "Stanford University"
+
+  - hostname: harvard.edu
+    category: education
+    notes: "Harvard University"
+
+  - hostname: cam.ac.uk
+    category: education
+    notes: "University of Cambridge"

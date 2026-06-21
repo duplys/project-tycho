@@ -1,0 +1,20 @@
+services:
+  backend:
+    build: .
+    command: uvicorn tls_visualizer.app:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TLS_VISUALIZER_FRONTEND_DIST=/app/frontend/dist
+    volumes:
+      - ./frontend/dist:/app/frontend/dist:ro
+
+  frontend-build:
+    image: node:20-alpine
+    working_dir: /app/frontend
+    volumes:
+      - ./frontend:/app/frontend
+    command: sh -c "npm ci && npm run build"
+    profiles:
+      - build

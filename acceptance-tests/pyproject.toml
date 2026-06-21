@@ -1,0 +1,16 @@
+[project]
+name = "acceptance-tests"
+version = "0.1.0"
+description = "End-to-end acceptance tests for Project Tycho"
+requires-python = ">=3.10"
+dependencies = [
+    "pytest>=8.0.0",
+    "requests>=2.31.0",
+    "tls-pcap-analyzer",
+]
+
+[tool.uv.sources]
+tls-pcap-analyzer = { path = "../pcap-analyser", editable = true }
+
+[tool.pytest.ini_options]
+addopts = "-v"

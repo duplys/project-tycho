@@ -1,0 +1,106 @@
+services:
+
+  # ===========================================================================
+  # Visualiser frontend (one-shot Node build; result shared with the backend)
+  # ===========================================================================
+  visualiser-frontend:
+    image: node:20-alpine
+    working_dir: /app
+    volumes:
+      - ./visualiser/frontend:/app
+      - frontend_dist:/app/dist
+    command: sh -c "npm ci && npm run build"
+
+  # ===========================================================================
+  # Visualiser backend (FastAPI + Vue.js)
+  # ===========================================================================
+  visualiser:
+    build:
+      context: ./visualiser
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TLS_VISUALIZER_OBSERVATORY_DATA_FILE: ${TLS_VISUALIZER_OBSERVATORY_DATA_FILE:-/var/pqc-obs/data/observatory-data.json}
+    volumes:
+      - frontend_dist:/app/frontend/dist:ro
+      - observatory_data:/var/pqc-obs/data:ro
+    depends_on:
+      visualiser-frontend:
+        condition: service_completed_successfully
+
+  # ===========================================================================
+  # Observatory scanner (Observatory + PCAP Analyser bundled)
+  # ===========================================================================
+  observatory:
+    build:
+      # Build context is the repo root so the Dockerfile can access both
+      # pcap-analyser/ and observatory/.
+      context: .
+      dockerfile: observatory/Dockerfile
+    restart: unless-stopped
+    # CAP_NET_RAW allows tcpdump to capture packets without running as root.
+    cap_add:
+      - NET_RAW
+    environment:
+      OBSERVATORY_PCAP_DIR: ${OBSERVATORY_PCAP_DIR:-/var/pqc-obs/captures}
+      OBSERVATORY_STORAGE_FILE: ${OBSERVATORY_STORAGE_FILE:-/var/pqc-obs/data/observatory-data.json}
+      OBSERVATORY_SCAN_TIMEOUT_S: ${OBSERVATORY_SCAN_TIMEOUT_S:-15}
+      OBSERVATORY_RATE_LIMIT_DELAY_S: ${OBSERVATORY_RATE_LIMIT_DELAY_S:-1.0}
+      OBSERVATORY_MAX_CONCURRENT_SCANS: ${OBSERVATORY_MAX_CONCURRENT_SCANS:-5}
+      OBSERVATORY_SCAN_USER_AGENT: ${OBSERVATORY_SCAN_USER_AGENT:-PQC-Observatory/1.0 (https://github.com/duplys/project-tycho; research)}
+      OBSERVATORY_SCAN_CLIENT: ${OBSERVATORY_SCAN_CLIENT:-python}
+      OBSERVATORY_OPENSSL_GROUPS: ${OBSERVATORY_OPENSSL_GROUPS:-}
+      OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK: ${OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK:-sun}
+      OBSERVATORY_SCAN_SCHEDULE_HOUR: ${OBSERVATORY_SCAN_SCHEDULE_HOUR:-8}
+      OBSERVATORY_SCAN_SCHEDULE_MINUTE: ${OBSERVATORY_SCAN_SCHEDULE_MINUTE:-0}
+      OBSERVATORY_SCAN_SCHEDULE_TIMEZONE: ${OBSERVATORY_SCAN_SCHEDULE_TIMEZONE:-Europe/Berlin}
+      OBSERVATORY_TARGETS_FILE: ${OBSERVATORY_TARGETS_FILE:-targets/default_targets.yaml}
+    volumes:
+      # Persistent pcap archive.
+      - pcap_store:/var/pqc-obs/captures
+      # Persistent JSON data store (also read by the Visualiser and Researcher).
+      - observatory_data:/var/pqc-obs/data
+      # Optionally override the target list without rebuilding the image.
+      - ./observatory/targets:/app/targets:ro
+  # ===========================================================================
+  # Researcher (one-shot AI agent; activate with --profile research)
+  # ===========================================================================
+  researcher:
+    build:
+      context: .
+      dockerfile: researcher/Dockerfile
+    profiles:
+      - research
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      RESEARCHER_VISUALISER_BASE_URL: ${RESEARCHER_VISUALISER_BASE_URL:-http://visualiser:8000}
+      RESEARCHER_OBSERVATORY_DATA_FILE: ${RESEARCHER_OBSERVATORY_DATA_FILE:-/var/pqc-obs/data/observatory-data.json}
+      RESEARCHER_REFERENCE_DIR: ${RESEARCHER_REFERENCE_DIR:-/var/pqc-obs/references}
+      RESEARCHER_OUTPUT_DIR: ${RESEARCHER_OUTPUT_DIR:-/var/pqc-obs/researcher-output}
+      RESEARCHER_LLM_MODEL: ${RESEARCHER_LLM_MODEL:-gpt-4.1-mini}
+      RESEARCHER_LLM_TEMPERATURE: ${RESEARCHER_LLM_TEMPERATURE:-0.2}
+      RESEARCHER_HTTP_TIMEOUT_S: ${RESEARCHER_HTTP_TIMEOUT_S:-30.0}
+      RESEARCHER_MAX_REFERENCE_SNIPPETS: ${RESEARCHER_MAX_REFERENCE_SNIPPETS:-6}
+      RESEARCHER_REFERENCE_CHUNK_SIZE: ${RESEARCHER_REFERENCE_CHUNK_SIZE:-1800}
+      RESEARCHER_REFERENCE_CHUNK_OVERLAP: ${RESEARCHER_REFERENCE_CHUNK_OVERLAP:-200}
+      RESEARCHER_MAX_VISUALIZATIONS: ${RESEARCHER_MAX_VISUALIZATIONS:-3}
+    volumes:
+      - observatory_data:/var/pqc-obs/data:ro
+      - researcher_references:/var/pqc-obs/references:ro
+      - researcher_output:/var/pqc-obs/researcher-output
+    command:
+      - run
+      - --topic
+      - ${RESEARCHER_TOPIC:-Weekly PQC TLS adoption update}
+      - --output-type
+      - ${RESEARCHER_OUTPUT_TYPE:-research-summary}
+    depends_on:
+      - visualiser
+
+volumes:
+  pcap_store:
+  observatory_data:
+  frontend_dist:
+  researcher_references:
+  researcher_output:

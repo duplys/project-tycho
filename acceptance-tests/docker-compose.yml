@@ -1,0 +1,22 @@
+services:
+  visualiser:
+    build:
+      context: ../visualiser
+    ports:
+      - "8765:8000"
+    environment:
+      TLS_VISUALIZER_OBSERVATORY_DATA_FILE: /data/observatory-data.json
+    volumes:
+      - ./data:/data:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
+        ]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s

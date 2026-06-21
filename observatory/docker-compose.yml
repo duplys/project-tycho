@@ -1,0 +1,32 @@
+services:
+
+  # =========================================================================
+  # PQC Observatory scanner (Observatory + PCAP Analyser bundled)
+  # =========================================================================
+  observatory:
+    build:
+      # Build context is the repo root so the Dockerfile can access both
+      # pcap-analyser/ and observatory/.
+      context: ..
+      dockerfile: observatory/Dockerfile
+    restart: unless-stopped
+    # CAP_NET_RAW allows tcpdump to capture packets without running as root.
+    cap_add:
+      - NET_RAW
+    environment:
+      # Override any setting via environment variable or an .env file.
+      # e.g. OBSERVATORY_SCAN_SCHEDULE_HOUR=3
+    volumes:
+      # Persistent pcap archive.  Mount a host directory here in production.
+      - pcap_store:/var/pqc-obs/captures
+      # Persistent JSON data store for targets and scan history.
+      - observatory_data:/var/pqc-obs/data
+      # Optionally override the target list without rebuilding the image.
+      - ./targets:/app/targets:ro
+    env_file:
+      - path: .env
+        required: false
+
+volumes:
+  pcap_store:
+  observatory_data:

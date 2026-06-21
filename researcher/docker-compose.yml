@@ -1,0 +1,21 @@
+services:
+  researcher:
+    build:
+      context: ..
+      dockerfile: researcher/Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY}
+      RESEARCHER_VISUALISER_BASE_URL: ${RESEARCHER_VISUALISER_BASE_URL:-http://host.docker.internal:8000}
+      RESEARCHER_OBSERVATORY_DATA_FILE: /var/pqc-obs/data/observatory-data.json
+      RESEARCHER_REFERENCE_DIR: /var/pqc-obs/references
+      RESEARCHER_OUTPUT_DIR: /var/pqc-obs/researcher-output
+    volumes:
+      - /var/pqc-obs/data:/var/pqc-obs/data:ro
+      - /var/pqc-obs/references:/var/pqc-obs/references:ro
+      - /var/pqc-obs/researcher-output:/var/pqc-obs/researcher-output
+    command:
+      - run
+      - --topic
+      - ${RESEARCHER_TOPIC:-Weekly PQC TLS adoption update}
+      - --output-type
+      - ${RESEARCHER_OUTPUT_TYPE:-research-summary}
