@@ -65,7 +65,7 @@ OBSERVATORY_SCAN_SCHEDULE_HOUR=8
 OBSERVATORY_SCAN_SCHEDULE_MINUTE=0
 OBSERVATORY_SCAN_SCHEDULE_TIMEZONE=Europe/Berlin
 OBSERVATORY_SCAN_CLIENT=openssl
-OBSERVATORY_PQC_PROBE_GROUPS=X25519MLKEM768
+OBSERVATORY_PQC_PROBE_GROUPS=MLKEM512,MLKEM768,MLKEM1024,SecP256r1MLKEM768,X25519MLKEM768,SecP384r1MLKEM1024,curveSM2MLKEM768,X25519Kyber768Draft00,SecP256r1Kyber768Draft00
 EOF
 
 # 3. Build and start.
@@ -75,9 +75,10 @@ docker compose up -d
 docker compose logs -f observatory
 ```
 
-The scanner runs one `X25519MLKEM768` TLS probe per target each week. The
-default is Sunday 08:00 Europe/Berlin, and the named timezone keeps the scan at
-local 08:00 across summer/winter daylight saving time changes. The container is granted
+The scanner runs one weekly round with one forced TLS handshake per configured
+PQC group and target. By default that is nine handshakes per target each week.
+The round starts Sunday at 08:00 Europe/Berlin, and the named timezone keeps it
+at local 08:00 across summer/winter daylight saving time changes. The container is granted
 `CAP_NET_RAW` capability, which allows `tcpdump` to capture packets without
 running as root.
 
@@ -130,7 +131,7 @@ All settings can be overridden via environment variables (prefix
 | `OBSERVATORY_RATE_LIMIT_DELAY_S` | `1.0` | Minimum gap between consecutive scans |
 | `OBSERVATORY_MAX_CONCURRENT_SCANS` | `5` | Thread pool size |
 | `OBSERVATORY_SCAN_CLIENT` | `openssl` | TLS client used for the scheduled probe |
-| `OBSERVATORY_PQC_PROBE_GROUPS` | `X25519MLKEM768` | Comma-separated groups; each additional group adds another TLS scan per target |
+| `OBSERVATORY_PQC_PROBE_GROUPS` | All registered PQC groups | Comma-separated groups; each group produces one forced TLS handshake per target during the weekly round |
 | `OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK` | `sun` | Day of week for the weekly scan |
 | `OBSERVATORY_SCAN_SCHEDULE_HOUR` | `8` | Hour in the configured timezone |
 | `OBSERVATORY_SCAN_SCHEDULE_MINUTE` | `0` | Minute in the configured timezone |
@@ -176,12 +177,19 @@ The observatory is designed to be a good citizen:
 
 - **Rate limiting** — a configurable minimum delay (`OBSERVATORY_RATE_LIMIT_DELAY_S`)
   between consecutive scans.
+- **Weekly cadence** — each configured group is probed once per target in a
+  single weekly round; the default is nine TLS handshakes per target per week.
 - **Identified User-Agent** — the HTTP request used to complete the handshake
   includes a descriptive `User-Agent` header with a project URL.
 - **Read-only** — only the public TLS negotiation is observed; no application
   data is stored.
 - **Targeted** — only a curated list of hosts is scanned, not arbitrary
   internet ranges.
+
+Each probe relies on the installed OpenSSL recognizing its configured group
+name. A local "unknown group" failure means that the scanner cannot test that
+group; it does not show that the remote server lacks support. This is especially
+likely for obsolete pre-standard Kyber groups on current OpenSSL releases.
 
 ---
 

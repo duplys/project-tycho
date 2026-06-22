@@ -88,7 +88,7 @@ def test_start_scheduler_registers_weekly_berlin_job_without_startup_scan(
     assert kwargs["coalesce"] is True
 
 
-def test_run_scan_round_probes_each_target_once_by_default(monkeypatch):
+def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
     calls = []
 
     monkeypatch.setattr(settings, "scan_client", "openssl")
@@ -128,8 +128,18 @@ def test_run_scan_round_probes_each_target_once_by_default(monkeypatch):
 
     scheduler_module.run_scan_round(targets=[Target(hostname="cloudflare.com")])
 
-    assert DEFAULT_PQC_PROBE_GROUPS == ("X25519MLKEM768",)
-    assert len(calls) == 1
+    assert DEFAULT_PQC_PROBE_GROUPS == (
+        "MLKEM512",
+        "MLKEM768",
+        "MLKEM1024",
+        "SecP256r1MLKEM768",
+        "X25519MLKEM768",
+        "SecP384r1MLKEM1024",
+        "curveSM2MLKEM768",
+        "X25519Kyber768Draft00",
+        "SecP256r1Kyber768Draft00",
+    )
+    assert len(calls) == 9
     assert [call["openssl_groups"] for call in calls] == list(DEFAULT_PQC_PROBE_GROUPS)
     assert [call["probe_group"] for call in calls] == list(DEFAULT_PQC_PROBE_GROUPS)
     assert {call["scan_client"] for call in calls} == {"openssl"}
