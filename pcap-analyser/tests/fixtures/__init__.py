@@ -244,15 +244,15 @@ def make_hybrid_mlkem768_pcap(path: Path | None = None) -> Path:
     hybrid_ke = b"\xAB" * 1216  # 32 (X25519) + 1184 (ML-KEM-768 encapsulation key)
     ch = _client_hello(
         cipher_suites=[0x1301, 0x1302, 0x1303],
-        supported_groups=[0x11EB, 0x001D, 0x0017],  # X25519MLKEM768, x25519, secp256r1
+        supported_groups=[0x11EC, 0x001D, 0x0017],  # X25519MLKEM768, x25519, secp256r1
         sig_algos=[0x0804, 0x0403, 0x0807],
-        key_shares=[(0x11EB, hybrid_ke)],
+        key_shares=[(0x11EC, hybrid_ke)],
         sni="cloudflare.com",
     )
     hybrid_sh_ke = b"\xCD" * 1120  # ML-KEM-768 ciphertext is 1088 bytes + 32 X25519
     sh = _server_hello(
         cipher_suite=0x1301,
-        selected_group=0x11EB,
+        selected_group=0x11EC,
         ke_data=hybrid_sh_ke,
     )
     if path is None:

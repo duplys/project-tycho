@@ -43,15 +43,21 @@ class TestPqcRegistry:
         assert is_pqc_group(0x0201)  # MLKEM768
 
     def test_hybrid_group_is_pqc_and_hybrid(self):
-        assert is_pqc_group(0x11EB)   # X25519MLKEM768
-        assert is_hybrid_group(0x11EB)
+        assert is_pqc_group(0x11EC)   # X25519MLKEM768
+        assert is_hybrid_group(0x11EC)
+
+    def test_sm2_mlkem_group_is_pqc_and_hybrid(self):
+        assert is_pqc_group(0x11EE)  # curveSM2MLKEM768
+        assert is_hybrid_group(0x11EE)
 
     def test_pure_mlkem_is_not_hybrid(self):
         assert not is_hybrid_group(0x0201)
 
     def test_group_name_known(self):
         assert group_name(0x001D) == "x25519"
-        assert group_name(0x11EB) == "X25519MLKEM768"
+        assert group_name(0x11EB) == "SecP256r1MLKEM768"
+        assert group_name(0x11EC) == "X25519MLKEM768"
+        assert group_name(0x11EE) == "curveSM2MLKEM768"
         assert group_name(0x0201) == "MLKEM768"
 
     def test_group_name_unknown(self):

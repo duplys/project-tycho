@@ -98,7 +98,7 @@ for r in records:
       "supported_versions": ["0x0304", "0x0303"]
     },
     "key_shares": [
-      { "group_id": 4587, "group_name": "X25519MLKEM768", "key_exchange_length": 1216 }
+      { "group_id": 4588, "group_name": "X25519MLKEM768", "key_exchange_length": 1216 }
     ]
   },
   "server_hello": {
@@ -135,15 +135,20 @@ uv run pytest tests/ -v
 
 ### Key Exchange / Named Groups
 
-| Code point | Name | Type |
-|---|---|---|
-| 0x0200 | MLKEM512 | Pure PQC |
-| 0x0201 | MLKEM768 | Pure PQC |
-| 0x0202 | MLKEM1024 | Pure PQC |
-| 0x11EB | X25519MLKEM768 | Hybrid |
-| 0x11EC | SecP256r1MLKEM768 | Hybrid |
-| 0x11ED | SecP384r1MLKEM1024 | Hybrid |
-| 0x6399 | X25519Kyber768Draft00 | Hybrid (experimental) |
+| Code point | Name | Type | Identifier source |
+|---|---|---|---|
+| 0x0200 | MLKEM512 | Pure PQC | [ML-KEM for TLS 1.3, section 4.1](https://datatracker.ietf.org/doc/html/draft-ietf-tls-mlkem#section-4.1) |
+| 0x0201 | MLKEM768 | Pure PQC | [ML-KEM for TLS 1.3, section 4.1](https://datatracker.ietf.org/doc/html/draft-ietf-tls-mlkem#section-4.1) |
+| 0x0202 | MLKEM1024 | Pure PQC | [ML-KEM for TLS 1.3, section 4.1](https://datatracker.ietf.org/doc/html/draft-ietf-tls-mlkem#section-4.1) |
+| 0x11EB | SecP256r1MLKEM768 | Hybrid | [ECDHE/ML-KEM, section 7](https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem#section-7) |
+| 0x11EC | X25519MLKEM768 | Hybrid | [ECDHE/ML-KEM, section 7](https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem#section-7) |
+| 0x11ED | SecP384r1MLKEM1024 | Hybrid | [ECDHE/ML-KEM, section 7](https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem#section-7) |
+| 0x11EE | curveSM2MLKEM768 | Hybrid | [SM2/ML-KEM, section 4](https://datatracker.ietf.org/doc/html/draft-yang-tls-hybrid-sm2-mlkem#section-4) |
+| 0x6399 | X25519Kyber768Draft00 | Hybrid (obsolete) | [ECDHE/ML-KEM, section 7.4](https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem#section-7.4) |
+| 0x639A | SecP256r1Kyber768Draft00 | Hybrid (obsolete) | [ECDHE/ML-KEM, section 7.4](https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem#section-7.4) |
+
+The complete assignment status is maintained in the
+[IANA TLS Supported Groups registry](https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8).
 
 ### Signature Algorithms
 

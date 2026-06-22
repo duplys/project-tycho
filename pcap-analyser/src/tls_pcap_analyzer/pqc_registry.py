@@ -5,6 +5,9 @@ Sources:
   - IANA TLS Parameters: https://www.iana.org/assignments/tls-parameters/
   - NIST FIPS 203 (ML-KEM), FIPS 204 (ML-DSA), FIPS 205 (SLH-DSA)
   - draft-ietf-tls-hybrid-design (hybrid key exchange)
+  - draft-ietf-tls-mlkem (standalone ML-KEM key exchange)
+  - draft-ietf-tls-ecdhe-mlkem (ECDHE/ML-KEM hybrid groups)
+  - draft-yang-tls-hybrid-sm2-mlkem (SM2/ML-KEM hybrid group)
   - draft-ietf-tls-mldsa (ML-DSA in TLS)
 """
 
@@ -73,15 +76,21 @@ NAMED_GROUP_NAMES: dict[int, str] = {
     0x0023: "brainpoolP256r1",
     0x0024: "brainpoolP384r1",
     0x0025: "brainpoolP512r1",
-    # Pure ML-KEM groups (draft-ietf-tls-mlkem / IANA pending)
+    # Pure ML-KEM groups, registered in the IANA TLS Supported Groups registry.
+    # Source: https://datatracker.ietf.org/doc/html/draft-ietf-tls-mlkem#section-4.1
     0x0200: "MLKEM512",
     0x0201: "MLKEM768",
     0x0202: "MLKEM1024",
-    # Hybrid groups (draft-ietf-tls-hybrid-design IANA codepoints)
-    0x11EB: "X25519MLKEM768",
-    0x11EC: "SecP256r1MLKEM768",
+    # ECDHE/ML-KEM hybrid groups.
+    # Source: https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem#section-7
+    0x11EB: "SecP256r1MLKEM768",
+    0x11EC: "X25519MLKEM768",
     0x11ED: "SecP384r1MLKEM1024",
-    # Experimental / early deployment hybrid codepoints (Cloudflare era)
+    # SM2/ML-KEM hybrid group (TLS 1.3 only).
+    # Source: https://datatracker.ietf.org/doc/html/draft-yang-tls-hybrid-sm2-mlkem#section-4
+    0x11EE: "curveSM2MLKEM768",
+    # Obsolete pre-standard Kyber hybrid groups, retained for PCAP analysis.
+    # Source: https://datatracker.ietf.org/doc/html/draft-ietf-tls-ecdhe-mlkem#section-7.4
     0x6399: "X25519Kyber768Draft00",
     0x639A: "SecP256r1Kyber768Draft00",
     # GREASE values (RFC 8701)
@@ -107,7 +116,9 @@ NAMED_GROUP_NAMES: dict[int, str] = {
 PQC_ONLY_GROUPS: frozenset[int] = frozenset({0x0200, 0x0201, 0x0202})
 
 # Set of hybrid (classical + PQC) group IDs
-HYBRID_GROUPS: frozenset[int] = frozenset({0x11EB, 0x11EC, 0x11ED, 0x6399, 0x639A})
+HYBRID_GROUPS: frozenset[int] = frozenset(
+    {0x11EB, 0x11EC, 0x11ED, 0x11EE, 0x6399, 0x639A}
+)
 
 # All groups that carry PQC material
 PQC_GROUPS: frozenset[int] = PQC_ONLY_GROUPS | HYBRID_GROUPS
