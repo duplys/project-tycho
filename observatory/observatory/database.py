@@ -15,7 +15,7 @@ from observatory.models import HandshakeData, ScanResult, Target
 
 log = logging.getLogger(__name__)
 
-_STORE_VERSION = 2
+_STORE_VERSION = 3
 _LOCK = RLock()
 
 
@@ -42,6 +42,90 @@ def _parse_datetime(value: str | datetime) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed
+
+
+def _scan_round_key(scan: dict[str, Any]) -> str:
+    """Return a persisted round ID or a stable synthetic ID for legacy rows."""
+    return scan.get("scan_round_id") or f"legacy:{scan['id']}"
+
+
+def _probe_status(scan: dict[str, Any]) -> str:
+    if scan.get("error") is not None:
+        return "failed"
+    if scan.get("selected_group") is not None:
+        return "supported"
+    return "unknown"
+
+
+def _group_scans_by_target_round(
+    scans: list[dict[str, Any]],
+) -> dict[tuple[int, str], list[dict[str, Any]]]:
+    grouped: dict[tuple[int, str], list[dict[str, Any]]] = defaultdict(list)
+    for scan in scans:
+        grouped[(scan["target_id"], _scan_round_key(scan))].append(scan)
+    return grouped
+
+
+def _aggregate_target_round(
+    target: dict[str, Any], round_id: str, scans: list[dict[str, Any]]
+) -> dict[str, Any]:
+    ordered = sorted(scans, key=lambda scan: _parse_datetime(scan["scanned_at"]))
+    probe_results = []
+    supported_groups: list[str] = []
+    failed_groups: list[str] = []
+    unknown_groups: list[str] = []
+
+    for scan in ordered:
+        status = _probe_status(scan)
+        group = scan.get("probe_group") or scan.get("selected_group")
+        if group:
+            destination = {
+                "supported": supported_groups,
+                "failed": failed_groups,
+                "unknown": unknown_groups,
+            }[status]
+            if group not in destination:
+                destination.append(group)
+        probe_results.append(
+            {
+                "scan_id": scan["id"],
+                "probe_group": scan.get("probe_group"),
+                "scanned_at": _parse_datetime(scan["scanned_at"]),
+                "status": status,
+                "selected_group": scan.get("selected_group"),
+                "is_pqc": scan.get("is_pqc"),
+                "is_hybrid": scan.get("is_hybrid"),
+                "negotiated_cipher_suite": scan.get("negotiated_cipher_suite"),
+                "error": scan.get("error"),
+            }
+        )
+
+    return {
+        "hostname": target["hostname"],
+        "port": target["port"],
+        "category": target["category"],
+        "scan_round_id": round_id,
+        "scanned_at": _parse_datetime(ordered[-1]["scanned_at"]),
+        "is_pqc": any(
+            _probe_status(scan) == "supported" and scan.get("is_pqc") is True
+            for scan in ordered
+        ),
+        "is_hybrid": any(
+            _probe_status(scan) == "supported" and scan.get("is_hybrid") is True
+            for scan in ordered
+        ),
+        "supported_groups": supported_groups,
+        "failed_groups": failed_groups,
+        "unknown_groups": unknown_groups,
+        "successful_probe_count": sum(
+            _probe_status(scan) == "supported" for scan in ordered
+        ),
+        "failed_probe_count": sum(_probe_status(scan) == "failed" for scan in ordered),
+        "unknown_probe_count": sum(
+            _probe_status(scan) == "unknown" for scan in ordered
+        ),
+        "probe_results": probe_results,
+    }
 
 
 def _ensure_store_file(storage_file: Path | None = None) -> Path:
@@ -165,6 +249,7 @@ def insert_scan(target_id: int, result: ScanResult) -> int:
             {
                 "id": scan_id,
                 "target_id": target_id,
+                "scan_round_id": result.scan_round_id,
                 "scanned_at": result.scanned_at.isoformat(),
                 "probe_group": result.probe_group,
                 "pcap_path": result.pcap_path,
@@ -204,15 +289,20 @@ def get_pqc_adoption_over_time(
         lambda: {"total": 0, "pqc_count": 0}
     )
 
-    for scan in data["scans"]:
-        if scan.get("error") is not None or scan.get("is_pqc") is None:
+    for round_scans in _group_scans_by_target_round(data["scans"]).values():
+        ordered = sorted(round_scans, key=lambda scan: _parse_datetime(scan["scanned_at"]))
+        round_time = _parse_datetime(ordered[0]["scanned_at"])
+        if since and round_time < since:
             continue
-        scanned_at = _parse_datetime(scan["scanned_at"])
-        if since and scanned_at < since:
+        statuses = [_probe_status(scan) for scan in ordered]
+        if all(status == "unknown" for status in statuses):
             continue
-        scan_date = scanned_at.date()
+        scan_date = round_time.date()
         grouped[scan_date]["total"] += 1
-        if scan.get("is_pqc"):
+        if any(
+            status == "supported" and scan.get("is_pqc") is True
+            for status, scan in zip(statuses, ordered, strict=True)
+        ):
             grouped[scan_date]["pqc_count"] += 1
 
     rows = []
@@ -255,39 +345,28 @@ def get_algorithm_popularity(
 
 
 def get_latest_scan_per_target() -> list[dict[str, Any]]:
-    """Return the latest scan row for every active target."""
+    """Return an aggregate of the latest scan round for every active target."""
     with _LOCK:
         data = _load_store()
 
-    latest_scans: dict[int, dict[str, Any]] = {}
-    for scan in data["scans"]:
-        target_id = scan["target_id"]
-        current = latest_scans.get(target_id)
-        if current is None or _parse_datetime(scan["scanned_at"]) > _parse_datetime(
-            current["scanned_at"]
+    rounds = _group_scans_by_target_round(data["scans"])
+    latest_rounds: dict[int, tuple[str, list[dict[str, Any]]]] = {}
+    for (target_id, round_id), scans in rounds.items():
+        round_time = max(_parse_datetime(scan["scanned_at"]) for scan in scans)
+        current = latest_rounds.get(target_id)
+        if current is None or round_time > max(
+            _parse_datetime(scan["scanned_at"]) for scan in current[1]
         ):
-            latest_scans[target_id] = scan
+            latest_rounds[target_id] = (round_id, scans)
 
     rows: list[dict[str, Any]] = []
     for target in sorted(
         (target for target in data["targets"] if target.get("is_active", True)),
         key=lambda item: item["hostname"],
     ):
-        latest = latest_scans.get(target["id"])
+        latest = latest_rounds.get(target["id"])
         if latest is None:
             continue
-        rows.append(
-            {
-                "hostname": target["hostname"],
-                "port": target["port"],
-                "category": target["category"],
-                "scanned_at": _parse_datetime(latest["scanned_at"]),
-                "is_pqc": latest.get("is_pqc"),
-                "is_hybrid": latest.get("is_hybrid"),
-                "selected_group": latest.get("selected_group"),
-                "probe_group": latest.get("probe_group"),
-                "negotiated_cipher_suite": latest.get("negotiated_cipher_suite"),
-                "error": latest.get("error"),
-            }
-        )
+        round_id, scans = latest
+        rows.append(_aggregate_target_round(target, round_id, scans))
     return rows

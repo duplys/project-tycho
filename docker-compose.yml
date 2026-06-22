@@ -46,7 +46,7 @@ services:
       OBSERVATORY_PCAP_DIR: ${OBSERVATORY_PCAP_DIR:-/var/pqc-obs/captures}
       OBSERVATORY_STORAGE_FILE: ${OBSERVATORY_STORAGE_FILE:-/var/pqc-obs/data/observatory-data.json}
       OBSERVATORY_SCAN_TIMEOUT_S: ${OBSERVATORY_SCAN_TIMEOUT_S:-15}
-      OBSERVATORY_RATE_LIMIT_DELAY_S: ${OBSERVATORY_RATE_LIMIT_DELAY_S:-1.0}
+      OBSERVATORY_RATE_LIMIT_DELAY_S: ${OBSERVATORY_RATE_LIMIT_DELAY_S:-30.0}
       OBSERVATORY_MAX_CONCURRENT_SCANS: ${OBSERVATORY_MAX_CONCURRENT_SCANS:-5}
       OBSERVATORY_SCAN_USER_AGENT: ${OBSERVATORY_SCAN_USER_AGENT:-PQC-Observatory/1.0 (https://github.com/duplys/project-tycho; research)}
       # Force one handshake per PQC group during the single weekly scan round.

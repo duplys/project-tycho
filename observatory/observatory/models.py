@@ -71,6 +71,8 @@ class ScanResult(BaseModel):
     target_hostname: str
     target_port: int
     scanned_at: datetime
+    # Stable identifier shared by every probe in one scheduled/manual round.
+    scan_round_id: str | None = None
     # Named group intentionally offered for this targeted capability probe.
     probe_group: str | None = None
     pcap_path: str | None = None

@@ -157,8 +157,8 @@ With the backend running, visit:
 | `GET` | `/api/handshakes` | List all stored records (summaries) |
 | `GET` | `/api/handshakes/{id}` | Get full record |
 | `DELETE` | `/api/handshakes/{id}` | Delete a record |
-| `GET` | `/api/observatory/status` | Latest Observatory scan per active target |
-| `GET` | `/api/observatory/adoption` | Daily PQC adoption summary from the Observatory JSON store |
+| `GET` | `/api/observatory/status` | Latest aggregated scan round per active target, including group-level probe results |
+| `GET` | `/api/observatory/adoption` | Daily target-level PQC adoption summary (one observation per target and round) |
 | `GET` | `/api/observatory/algorithms` | Negotiated group counts from the Observatory JSON store |
 | `GET` | `/api/handshakes/{id}/export/tikz/handshake-flow` | Download handshake flow `.tex` |
 | `GET` | `/api/handshakes/{id}/export/tikz/key-share-comparison` | Download key share comparison `.tex` |

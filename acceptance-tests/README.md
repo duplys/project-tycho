@@ -45,7 +45,7 @@ The pre-seeded `data/observatory-data.json` contains two targets
 
 | Test | What it checks |
 |------|---------------|
-| `test_status_returns_two_active_targets` | `/api/observatory/status` returns one row per active target |
+| `test_status_returns_two_active_targets` | `/api/observatory/status` returns one aggregated round per active target |
 | `test_cloudflare_latest_scan_is_pqc` | cloudflare.com latest scan shows PQC / X25519MLKEM768 |
 | `test_example_latest_scan_is_not_pqc` | example.com latest scan shows classical / x25519 |
 | `test_adoption_trend_two_days` | `/api/observatory/adoption` computes 50 % on 2026-05-21 and 100 % on 2026-05-22 |

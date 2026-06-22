@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +46,7 @@ def scan_target(
     scan_client: Literal["python", "openssl"] = "python",
     openssl_groups: str | None = None,
     probe_group: str | None = None,
+    scan_round_id: str | None = None,
     diagnostics: bool = False,
 ) -> ScanResult:
     """Run a full capture + analysis cycle for one host.
@@ -54,6 +56,7 @@ def scan_target(
     """
     started = time.monotonic()
     scanned_at = datetime.now(timezone.utc)
+    scan_round_id = scan_round_id or uuid.uuid4().hex
     pcap_path: Path | None = None
     analyzer_output = None
     handshake: HandshakeData | None = None
@@ -74,6 +77,7 @@ def scan_target(
             target_hostname=hostname,
             target_port=port,
             scanned_at=scanned_at,
+            scan_round_id=scan_round_id,
             probe_group=probe_group,
             error=error,
             scan_duration_ms=int((time.monotonic() - started) * 1000),
@@ -107,6 +111,7 @@ def scan_target(
         target_hostname=hostname,
         target_port=port,
         scanned_at=scanned_at,
+        scan_round_id=scan_round_id,
         probe_group=probe_group,
         pcap_path=str(pcap_path),
         analyzer_output=analyzer_output,
@@ -116,12 +121,40 @@ def scan_target(
     )
 
 
+def scan_target_groups(
+    target: Target,
+    groups: list[str],
+    *,
+    scan_round_id: str,
+    scan_client: Literal["python", "openssl"],
+    diagnostics: bool = False,
+) -> list[ScanResult]:
+    """Probe one target's groups sequentially with a gap between attempts."""
+    results: list[ScanResult] = []
+    for index, group in enumerate(groups):
+        results.append(
+            scan_target(
+                target.hostname,
+                target.port,
+                scan_client=scan_client,
+                openssl_groups=group,
+                probe_group=group,
+                scan_round_id=scan_round_id,
+                diagnostics=diagnostics,
+            )
+        )
+        if index < len(groups) - 1:
+            time.sleep(settings.rate_limit_delay_s)
+    return results
+
+
 def run_scan_round(
     targets: list[Target] | None = None,
     *,
     scan_client: Literal["python", "openssl"] | None = None,
     openssl_groups: str | None = None,
     probe_groups: list[str] | tuple[str, ...] | None = None,
+    scan_round_id: str | None = None,
     diagnostics: bool = False,
 ) -> None:
     """Scan all active targets and persist results.
@@ -134,6 +167,7 @@ def run_scan_round(
     """
     log.info("=== Scan round starting ===")
     round_start = time.monotonic()
+    scan_round_id = scan_round_id or uuid.uuid4().hex
     scan_client = scan_client or settings.scan_client
     if openssl_groups is not None:
         groups_to_probe = [openssl_groups]
@@ -182,42 +216,40 @@ def run_scan_round(
     with ThreadPoolExecutor(max_workers=settings.max_concurrent_scans) as pool:
         futures = {}
         for t in targets:
-            for group in groups_to_probe:
-                futures[
-                    pool.submit(
-                        scan_target,
-                        t.hostname,
-                        t.port,
-                        scan_client=scan_client,
-                        openssl_groups=group,
-                        probe_group=group,
-                        diagnostics=diagnostics,
-                    )
-                ] = t
-                # Stagger submission so we don't initiate all connections
-                # simultaneously — a courtesy towards target servers.
-                time.sleep(settings.rate_limit_delay_s)
+            futures[
+                pool.submit(
+                    scan_target_groups,
+                    t,
+                    groups_to_probe,
+                    scan_round_id=scan_round_id,
+                    scan_client=scan_client,
+                    diagnostics=diagnostics,
+                )
+            ] = t
 
         for future in as_completed(futures):
             target = futures[future]
             try:
-                result = future.result()
+                results = future.result()
             except Exception as exc:
                 log.error("Unexpected error scanning %s: %s", target.hostname, exc)
                 continue
 
-            try:
-                target_id = upsert_target(target)
-                scan_id = insert_scan(target_id, result)
-                log.info(
-                    "Stored scan #%d for %s (pqc=%s, error=%s)",
-                    scan_id,
-                    target.hostname,
-                    result.handshake.is_pqc if result.handshake else "n/a",
-                    result.error,
-                )
-            except Exception as exc:
-                log.error("Data file write failed for %s: %s", target.hostname, exc)
+            for result in results:
+                try:
+                    target_id = upsert_target(target)
+                    scan_id = insert_scan(target_id, result)
+                    log.info(
+                        "Stored scan #%d for %s (round=%s, group=%s, pqc=%s, error=%s)",
+                        scan_id,
+                        target.hostname,
+                        scan_round_id,
+                        result.probe_group,
+                        result.handshake.is_pqc if result.handshake else "n/a",
+                        result.error,
+                    )
+                except Exception as exc:
+                    log.error("Data file write failed for %s: %s", target.hostname, exc)
 
     elapsed = time.monotonic() - round_start
     log.info("=== Scan round complete in %.1fs ===", elapsed)

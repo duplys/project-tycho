@@ -85,9 +85,9 @@ OBSERVATORY_DATA = {
 }
 
 
-def _write_observatory_data(tmp_path, monkeypatch):
+def _write_observatory_data(tmp_path, monkeypatch, data=OBSERVATORY_DATA):
     data_file = tmp_path / "observatory-data.json"
-    data_file.write_text(json.dumps(OBSERVATORY_DATA), encoding="utf-8")
+    data_file.write_text(json.dumps(data), encoding="utf-8")
     monkeypatch.setenv("TLS_VISUALIZER_OBSERVATORY_DATA_FILE", str(data_file))
     return data_file
 
@@ -102,6 +102,55 @@ def test_observatory_status(client, tmp_path, monkeypatch):
     assert len(items) == 2
     assert items[0]["hostname"] == "cloudflare.com"
     assert items[0]["scanned_at"] == "2026-05-22T10:00:00+00:00"
+    assert items[0]["scan_round_id"] == "legacy:3"
+    assert items[0]["supported_groups"] == ["X25519MLKEM768"]
+
+
+def test_observatory_status_aggregates_latest_round(client, tmp_path, monkeypatch):
+    data = json.loads(json.dumps(OBSERVATORY_DATA))
+    data["scans"].extend(
+        [
+            {
+                "id": 4,
+                "target_id": 1,
+                "scan_round_id": "weekly-round",
+                "scanned_at": "2026-05-29T08:00:00+00:00",
+                "probe_group": "X25519MLKEM768",
+                "selected_group": "X25519MLKEM768",
+                "is_pqc": True,
+                "is_hybrid": True,
+                "error": None,
+            },
+            {
+                "id": 5,
+                "target_id": 1,
+                "scan_round_id": "weekly-round",
+                "scanned_at": "2026-05-29T08:01:00+00:00",
+                "probe_group": "MLKEM768",
+                "selected_group": None,
+                "is_pqc": None,
+                "is_hybrid": None,
+                "error": "handshake failed",
+            },
+        ]
+    )
+    _write_observatory_data(tmp_path, monkeypatch, data)
+
+    cloudflare = next(
+        item
+        for item in client.get("/api/observatory/status").json()
+        if item["hostname"] == "cloudflare.com"
+    )
+
+    assert cloudflare["scan_round_id"] == "weekly-round"
+    assert cloudflare["supported_groups"] == ["X25519MLKEM768"]
+    assert cloudflare["failed_groups"] == ["MLKEM768"]
+    assert cloudflare["successful_probe_count"] == 1
+    assert cloudflare["failed_probe_count"] == 1
+    assert [probe["status"] for probe in cloudflare["probe_results"]] == [
+        "supported",
+        "failed",
+    ]
 
 
 def test_observatory_adoption(client, tmp_path, monkeypatch):

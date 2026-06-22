@@ -67,6 +67,7 @@ OBSERVATORY_SCAN_SCHEDULE_MINUTE=0
 OBSERVATORY_SCAN_SCHEDULE_TIMEZONE=Europe/Berlin
 OBSERVATORY_SCAN_CLIENT=openssl
 OBSERVATORY_PQC_PROBE_GROUPS=MLKEM512,MLKEM768,MLKEM1024,SecP256r1MLKEM768,X25519MLKEM768,SecP384r1MLKEM1024,curveSM2MLKEM768,X25519Kyber768Draft00,SecP256r1Kyber768Draft00
+OBSERVATORY_RATE_LIMIT_DELAY_S=30
 EOF
 
 # 3. Build and start.
@@ -79,6 +80,8 @@ docker compose logs -f observatory
 The scanner runs one weekly round with one forced TLS handshake per locally
 supported PQC group and target. The default configuration contains nine groups;
 OpenSSL 4.0.1 supports seven of them, so each target receives seven handshakes.
+Those handshakes are performed sequentially with a 30-second pause after each
+completed attempt; up to five different targets may be scanned concurrently.
 The round starts Sunday at 08:00 Europe/Berlin, and the named timezone keeps it
 at local 08:00 across summer/winter daylight saving time changes. The container is granted
 `CAP_NET_RAW` capability, which allows `tcpdump` to capture packets without
@@ -140,8 +143,8 @@ All settings can be overridden via environment variables (prefix
 | `OBSERVATORY_PCAP_DIR` | `/var/pqc-obs/captures` | Directory for pcap files |
 | `OBSERVATORY_STORAGE_FILE` | `/var/pqc-obs/data/observatory-data.json` | JSON file containing targets and scan history |
 | `OBSERVATORY_SCAN_TIMEOUT_S` | `15` | Per-host TLS timeout (seconds) |
-| `OBSERVATORY_RATE_LIMIT_DELAY_S` | `1.0` | Minimum gap between consecutive scans |
-| `OBSERVATORY_MAX_CONCURRENT_SCANS` | `5` | Thread pool size |
+| `OBSERVATORY_RATE_LIMIT_DELAY_S` | `30.0` | Gap between completed probes against the same target |
+| `OBSERVATORY_MAX_CONCURRENT_SCANS` | `5` | Maximum target hosts scanned concurrently |
 | `OBSERVATORY_SCAN_CLIENT` | `openssl` | TLS client used for the scheduled probe |
 | `OBSERVATORY_PQC_PROBE_GROUPS` | All registered PQC groups | Comma-separated groups; each locally supported group produces one forced TLS handshake per target during the weekly round |
 | `OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK` | `sun` | Day of week for the weekly scan |
@@ -179,6 +182,7 @@ The observatory stores its state in a single JSON file with top-level keys:
 - `next_target_id` / `next_scan_id` — monotonically increasing numeric IDs
 - `targets` — configured targets plus metadata such as category and activation
 - `scans` — append-only scan history with analyzer output and indexed summary fields
+  including a shared `scan_round_id` for probes collected in the same round
 
 This keeps the stored results machine-readable and easy to back up, inspect, or
 mount into the Visualiser without running a database server.
@@ -190,7 +194,7 @@ mount into the Visualiser without running a database server.
 The observatory is designed to be a good citizen:
 
 - **Rate limiting** — a configurable minimum delay (`OBSERVATORY_RATE_LIMIT_DELAY_S`)
-  between consecutive scans.
+  between completed probes against one host; probes for a host never overlap.
 - **Weekly cadence** — each configured group is probed once per target in a
   single weekly round when locally supported; the default is seven TLS
   handshakes per target per week.

@@ -241,7 +241,7 @@ class TestObservatoryIntegration:
         )
         assert cloudflare["is_pqc"] is True
         assert cloudflare["is_hybrid"] is True
-        assert cloudflare["selected_group"] == "X25519MLKEM768"
+        assert cloudflare["supported_groups"] == ["X25519MLKEM768"]
 
     def test_example_latest_scan_is_not_pqc(self, base_url: str) -> None:
         """The latest Observatory scan for example.com reports a classical group."""
@@ -250,7 +250,7 @@ class TestObservatoryIntegration:
             item for item in resp.json() if item["hostname"] == "example.com"
         )
         assert example["is_pqc"] is False
-        assert example["selected_group"] == "x25519"
+        assert example["supported_groups"] == ["x25519"]
 
     def test_adoption_trend_two_days(self, base_url: str) -> None:
         """/api/observatory/adoption returns daily PQC adoption across both scan days."""

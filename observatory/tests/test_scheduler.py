@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from threading import Barrier, Lock, get_ident
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -49,12 +50,19 @@ def test_settings_load_probe_groups_env(monkeypatch):
     assert loaded.pqc_probe_groups == ["MLKEM768", "X25519MLKEM768"]
 
 
+def test_settings_default_to_thirty_second_probe_gap():
+    loaded = Settings(_env_file=None)
+
+    assert loaded.rate_limit_delay_s == 30.0
+
+
 @pytest.mark.parametrize(
     ("name", "value"),
     [
         ("OBSERVATORY_SCAN_SCHEDULE_HOUR", "24"),
         ("OBSERVATORY_SCAN_SCHEDULE_MINUTE", "60"),
         ("OBSERVATORY_SCAN_SCHEDULE_TIMEZONE", "Not/AZone"),
+        ("OBSERVATORY_RATE_LIMIT_DELAY_S", "-1"),
     ],
 )
 def test_settings_reject_invalid_schedule_values(monkeypatch, name, value):
@@ -109,11 +117,13 @@ def test_start_scheduler_registers_weekly_berlin_job_without_startup_scan(
 def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
     calls = []
     capability_updates = []
+    sleep_calls = []
 
     monkeypatch.setattr(settings, "scan_client", "openssl")
     monkeypatch.setattr(settings, "pqc_probe_groups", list(DEFAULT_PQC_PROBE_GROUPS))
     monkeypatch.setattr(settings, "max_concurrent_scans", 1)
-    monkeypatch.setattr(settings, "rate_limit_delay_s", 0)
+    monkeypatch.setattr(settings, "rate_limit_delay_s", 30)
+    monkeypatch.setattr(scheduler_module.time, "sleep", sleep_calls.append)
     monkeypatch.setattr(scheduler_module, "upsert_target", lambda target: 1)
     monkeypatch.setattr(scheduler_module, "insert_scan", lambda target_id, result: 1)
     monkeypatch.setattr(
@@ -129,6 +139,7 @@ def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
         scan_client="python",
         openssl_groups=None,
         probe_group=None,
+        scan_round_id=None,
         diagnostics=False,
     ):
         calls.append(
@@ -138,6 +149,7 @@ def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
                 "scan_client": scan_client,
                 "openssl_groups": openssl_groups,
                 "probe_group": probe_group,
+                "scan_round_id": scan_round_id,
                 "diagnostics": diagnostics,
             }
         )
@@ -145,6 +157,7 @@ def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
             target_hostname=hostname,
             target_port=port,
             probe_group=probe_group,
+            scan_round_id=scan_round_id,
             scanned_at=datetime(2026, 6, 17, tzinfo=UTC),
         )
 
@@ -168,6 +181,8 @@ def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
     assert [call["openssl_groups"] for call in calls] == supported_groups
     assert [call["probe_group"] for call in calls] == supported_groups
     assert {call["scan_client"] for call in calls} == {"openssl"}
+    assert len({call["scan_round_id"] for call in calls}) == 1
+    assert sleep_calls == [30] * 6
     assert capability_updates[0]["configured_groups"] == list(DEFAULT_PQC_PROBE_GROUPS)
     assert capability_updates[0]["supported_groups"] == supported_groups
     assert capability_updates[0]["unsupported_groups"] == [
@@ -193,6 +208,7 @@ def test_run_scan_round_uses_single_explicit_group(monkeypatch):
         scan_client="python",
         openssl_groups=None,
         probe_group=None,
+        scan_round_id=None,
         diagnostics=False,
     ):
         calls.append((hostname, port, scan_client, openssl_groups, probe_group))
@@ -243,3 +259,56 @@ def test_run_scan_round_fails_before_target_work_when_openssl_query_fails(monkey
 
     with pytest.raises(RuntimeError, match="capability query failed"):
         scheduler_module.run_scan_round(targets=[Target(hostname="cloudflare.com")])
+
+
+def test_scan_target_groups_continues_after_failed_probe(monkeypatch):
+    calls = []
+    sleeps = []
+    monkeypatch.setattr(settings, "rate_limit_delay_s", 30)
+    monkeypatch.setattr(scheduler_module.time, "sleep", sleeps.append)
+
+    def fake_scan_target(hostname, port=443, **kwargs):
+        calls.append(kwargs["probe_group"])
+        return ScanResult(
+            target_hostname=hostname,
+            target_port=port,
+            scanned_at=datetime(2026, 6, 21, tzinfo=UTC),
+            scan_round_id=kwargs["scan_round_id"],
+            probe_group=kwargs["probe_group"],
+            error="failed" if kwargs["probe_group"] == "MLKEM768" else None,
+        )
+
+    monkeypatch.setattr(scheduler_module, "scan_target", fake_scan_target)
+    results = scheduler_module.scan_target_groups(
+        Target(hostname="example.com"),
+        ["MLKEM512", "MLKEM768", "MLKEM1024"],
+        scan_round_id="round-id",
+        scan_client="openssl",
+    )
+
+    assert calls == ["MLKEM512", "MLKEM768", "MLKEM1024"]
+    assert sleeps == [30, 30]
+    assert results[1].error == "failed"
+
+
+def test_run_scan_round_allows_five_targets_concurrently(monkeypatch):
+    barrier = Barrier(5, timeout=2)
+    thread_ids = set()
+    lock = Lock()
+    monkeypatch.setattr(settings, "scan_client", "openssl")
+    monkeypatch.setattr(settings, "max_concurrent_scans", 5)
+    monkeypatch.setattr(settings, "pqc_probe_groups", ["X25519MLKEM768"])
+    monkeypatch.setattr(scheduler_module, "update_scanner_capabilities", lambda **kwargs: None)
+
+    def fake_target_groups(*args, **kwargs):
+        with lock:
+            thread_ids.add(get_ident())
+        barrier.wait()
+        return []
+
+    monkeypatch.setattr(scheduler_module, "scan_target_groups", fake_target_groups)
+    scheduler_module.run_scan_round(
+        targets=[Target(hostname=f"host-{index}.example") for index in range(5)]
+    )
+
+    assert len(thread_ids) == 5

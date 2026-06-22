@@ -63,3 +63,43 @@ def test_get_recent_scans_since_filter(tmp_path):
     )
     assert len(rows) == 1
     assert rows[0]["selected_group"] == "x25519"
+
+
+def test_round_aware_context_counts_target_once(tmp_path):
+    data_file = tmp_path / "observatory-data.json"
+    _write_store(data_file)
+    payload = json.loads(data_file.read_text(encoding="utf-8"))
+    payload["scans"] = [
+        {
+            "id": 3,
+            "target_id": 1,
+            "scan_round_id": "weekly-round",
+            "scanned_at": "2026-06-21T08:00:00+00:00",
+            "probe_group": "X25519MLKEM768",
+            "selected_group": "X25519MLKEM768",
+            "is_pqc": True,
+            "is_hybrid": True,
+            "error": None,
+        },
+        {
+            "id": 4,
+            "target_id": 1,
+            "scan_round_id": "weekly-round",
+            "scanned_at": "2026-06-21T08:01:00+00:00",
+            "probe_group": "MLKEM768",
+            "selected_group": None,
+            "is_pqc": None,
+            "is_hybrid": None,
+            "error": "handshake failed",
+        },
+    ]
+    payload["targets"] = payload["targets"][:1]
+    data_file.write_text(json.dumps(payload), encoding="utf-8")
+    connector = ObservatoryConnector(data_file=data_file)
+
+    context = connector.build_research_context()
+
+    assert context["total_scans_considered"] == 1
+    assert context["total_pqc_scans"] == 1
+    assert context["latest_status"][0]["supported_groups"] == ["X25519MLKEM768"]
+    assert context["latest_status"][0]["failed_groups"] == ["MLKEM768"]

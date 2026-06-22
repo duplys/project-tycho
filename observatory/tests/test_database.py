@@ -35,7 +35,7 @@ def test_apply_schema_creates_json_store(isolated_storage):
 
     assert storage_file.exists()
     data = json.loads(storage_file.read_text(encoding="utf-8"))
-    assert data["version"] == 2
+    assert data["version"] == 3
     assert data["scanner_capabilities"] is None
     assert data["targets"] == []
     assert data["scans"] == []
@@ -55,7 +55,7 @@ def test_apply_schema_migrates_v1_store_without_losing_history(isolated_storage)
     apply_schema()
 
     migrated = json.loads(storage_file.read_text(encoding="utf-8"))
-    assert migrated["version"] == 2
+    assert migrated["version"] == 3
     assert migrated["scanner_capabilities"] is None
     assert migrated["targets"] == existing["targets"]
     assert migrated["scans"] == existing["scans"]
@@ -129,7 +129,9 @@ def test_file_store_query_helpers(isolated_storage):
     latest = get_latest_scan_per_target()
     assert latest[0]["hostname"] == "cloudflare.com"
     assert latest[0]["scanned_at"] == datetime(2026, 5, 22, 10, 0, tzinfo=UTC)
-    assert latest[0]["probe_group"] is None
+    assert latest[0]["scan_round_id"] == "legacy:3"
+    assert latest[0]["supported_groups"] == ["X25519MLKEM768"]
+    assert latest[0]["successful_probe_count"] == 1
     assert latest[1]["hostname"] == "example.com"
 
     data = json.loads(settings.storage_file.read_text(encoding="utf-8"))
@@ -166,6 +168,89 @@ def test_scanner_capabilities_do_not_change_target_scan_history(isolated_storage
         DEFAULT_PQC_PROBE_GROUPS[-2:]
     )
     assert get_latest_scan_per_target()[0]["scanned_at"] == scanned_at
+
+
+def test_round_aggregation_and_adoption_count_target_once(isolated_storage):
+    apply_schema()
+    target_id = upsert_target(Target(hostname="example.com", category="test"))
+    round_id = "weekly-round"
+    scans = [
+        ScanResult(
+            target_hostname="example.com",
+            target_port=443,
+            scanned_at=datetime(2026, 6, 21, 8, 0, tzinfo=UTC),
+            scan_round_id=round_id,
+            probe_group="X25519MLKEM768",
+            handshake=HandshakeData(
+                selected_group="X25519MLKEM768", is_pqc=True, is_hybrid=True
+            ),
+        ),
+        ScanResult(
+            target_hostname="example.com",
+            target_port=443,
+            scanned_at=datetime(2026, 6, 21, 8, 1, tzinfo=UTC),
+            scan_round_id=round_id,
+            probe_group="MLKEM768",
+            error="capture failed: handshake failure",
+        ),
+        ScanResult(
+            target_hostname="example.com",
+            target_port=443,
+            scanned_at=datetime(2026, 6, 21, 8, 2, tzinfo=UTC),
+            scan_round_id=round_id,
+            probe_group="MLKEM1024",
+        ),
+    ]
+    for scan in scans:
+        insert_scan(target_id, scan)
+
+    status = get_latest_scan_per_target()[0]
+    assert status["scan_round_id"] == round_id
+    assert status["supported_groups"] == ["X25519MLKEM768"]
+    assert status["failed_groups"] == ["MLKEM768"]
+    assert status["unknown_groups"] == ["MLKEM1024"]
+    assert status["successful_probe_count"] == 1
+    assert status["failed_probe_count"] == 1
+    assert status["unknown_probe_count"] == 1
+    assert [probe["status"] for probe in status["probe_results"]] == [
+        "supported",
+        "failed",
+        "unknown",
+    ]
+    assert get_pqc_adoption_over_time() == [
+        {"date": "2026-06-21", "total": 1, "pqc_count": 1, "pct_pqc": 100.0}
+    ]
+
+
+def test_adoption_counts_all_failed_round_and_excludes_all_unknown(isolated_storage):
+    apply_schema()
+    failed_id = upsert_target(Target(hostname="failed.example"))
+    unknown_id = upsert_target(Target(hostname="unknown.example"))
+    insert_scan(
+        failed_id,
+        ScanResult(
+            target_hostname="failed.example",
+            target_port=443,
+            scanned_at=datetime(2026, 6, 21, 8, 0, tzinfo=UTC),
+            scan_round_id="failed-round",
+            probe_group="MLKEM768",
+            error="capture failed",
+        ),
+    )
+    insert_scan(
+        unknown_id,
+        ScanResult(
+            target_hostname="unknown.example",
+            target_port=443,
+            scanned_at=datetime(2026, 6, 21, 8, 0, tzinfo=UTC),
+            scan_round_id="unknown-round",
+            probe_group="MLKEM768",
+        ),
+    )
+
+    assert get_pqc_adoption_over_time() == [
+        {"date": "2026-06-21", "total": 1, "pqc_count": 0, "pct_pqc": 0.0}
+    ]
 
 
 def test_sync_targets_to_store_deactivates_removed_targets(isolated_storage):

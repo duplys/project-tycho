@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     # Per-host TCP/TLS connection timeout (seconds).
     scan_timeout_s: int = 15
     # Minimum gap between consecutive scans of the *same* host (seconds).
-    rate_limit_delay_s: float = 1.0
+    rate_limit_delay_s: float = 30.0
     # Maximum number of hosts scanned in parallel (thread pool size).
     max_concurrent_scans: int = 5
     # User-Agent sent in the HTTP GET used to complete the TLS handshake.
@@ -84,6 +84,13 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [item.strip() for item in v.split(",") if item.strip()]
         return list(v)
+
+    @field_validator("rate_limit_delay_s")
+    @classmethod
+    def _validate_rate_limit_delay_s(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("rate_limit_delay_s must be non-negative")
+        return v
 
     @field_validator("scan_schedule_hour")
     @classmethod

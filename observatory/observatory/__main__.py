@@ -177,7 +177,7 @@ def cmd_targets(sync: bool) -> None:
 
 @cli.command("status")
 def cmd_status() -> None:
-    """Show the most recent scan result for every active target."""
+    """Show the most recent aggregated scan round for every active target."""
     rows = get_latest_scan_per_target()
 
     if not rows:
@@ -185,26 +185,20 @@ def cmd_status() -> None:
         return
 
     click.echo(
-        f"{'HOSTNAME':<40} {'SCANNED AT':<22} {'PQC':>4}  {'HYBRID':>6}  "
-        f"{'GROUP':<30} ERROR"
+        f"{'HOSTNAME':<36} {'SCANNED AT':<22} {'PQC':>4}  {'OK':>3} "
+        f"{'FAIL':>4} {'UNK':>3}  SUPPORTED GROUPS"
     )
-    click.echo("-" * 120)
+    click.echo("-" * 130)
     for r in rows:
-        is_pqc_flag = (
-            "Y" if r["is_pqc"] is True else ("?" if r["is_pqc"] is None else "N")
-        )
-        is_hybrid_flag = (
-            "Y"
-            if r["is_hybrid"] is True
-            else ("?" if r["is_hybrid"] is None else "N")
-        )
+        is_pqc_flag = "Y" if r["is_pqc"] else "N"
         click.echo(
-            f"{r['hostname']:<40} "
+            f"{r['hostname']:<36} "
             f"{str(r['scanned_at'])[:19]:<22} "
             f"{is_pqc_flag:>4}  "
-            f"{is_hybrid_flag:>6}  "
-            f"{(r['selected_group'] or '—'):<30} "
-            f"{r['error'] or ''}"
+            f"{r['successful_probe_count']:>3} "
+            f"{r['failed_probe_count']:>4} "
+            f"{r['unknown_probe_count']:>3}  "
+            f"{', '.join(r['supported_groups']) or '—'}"
         )
 
 
