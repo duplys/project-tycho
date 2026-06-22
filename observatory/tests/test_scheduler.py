@@ -7,6 +7,24 @@ from observatory import scheduler as scheduler_module
 from observatory.config import Settings, settings
 from observatory.models import ScanResult, Target
 from observatory.probes import DEFAULT_PQC_PROBE_GROUPS
+from observatory.scanner import OpenSSLCapabilities
+
+
+# OpenSSL 3.5+ treats group names case-insensitively; use lower-case output here
+# to ensure configured IANA spelling is matched without relying on exact casing.
+CURRENT_OPENSSL_GROUPS = frozenset(group.lower() for group in DEFAULT_PQC_PROBE_GROUPS[:-2])
+
+
+@pytest.fixture(autouse=True)
+def mock_openssl_capability_query(monkeypatch):
+    monkeypatch.setattr(
+        scheduler_module,
+        "discover_openssl_capabilities",
+        lambda: OpenSSLCapabilities(
+            version="OpenSSL 4.0.1 9 Jun 2026",
+            implemented_groups=CURRENT_OPENSSL_GROUPS,
+        ),
+    )
 
 
 def test_settings_load_weekly_schedule_env(monkeypatch):
@@ -90,6 +108,7 @@ def test_start_scheduler_registers_weekly_berlin_job_without_startup_scan(
 
 def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
     calls = []
+    capability_updates = []
 
     monkeypatch.setattr(settings, "scan_client", "openssl")
     monkeypatch.setattr(settings, "pqc_probe_groups", list(DEFAULT_PQC_PROBE_GROUPS))
@@ -97,6 +116,11 @@ def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
     monkeypatch.setattr(settings, "rate_limit_delay_s", 0)
     monkeypatch.setattr(scheduler_module, "upsert_target", lambda target: 1)
     monkeypatch.setattr(scheduler_module, "insert_scan", lambda target_id, result: 1)
+    monkeypatch.setattr(
+        scheduler_module,
+        "update_scanner_capabilities",
+        lambda **kwargs: capability_updates.append(kwargs),
+    )
 
     def fake_scan_target(
         hostname,
@@ -139,10 +163,17 @@ def test_run_scan_round_probes_each_pqc_group_once_per_target(monkeypatch):
         "X25519Kyber768Draft00",
         "SecP256r1Kyber768Draft00",
     )
-    assert len(calls) == 9
-    assert [call["openssl_groups"] for call in calls] == list(DEFAULT_PQC_PROBE_GROUPS)
-    assert [call["probe_group"] for call in calls] == list(DEFAULT_PQC_PROBE_GROUPS)
+    supported_groups = list(DEFAULT_PQC_PROBE_GROUPS[:-2])
+    assert len(calls) == 7
+    assert [call["openssl_groups"] for call in calls] == supported_groups
+    assert [call["probe_group"] for call in calls] == supported_groups
     assert {call["scan_client"] for call in calls} == {"openssl"}
+    assert capability_updates[0]["configured_groups"] == list(DEFAULT_PQC_PROBE_GROUPS)
+    assert capability_updates[0]["supported_groups"] == supported_groups
+    assert capability_updates[0]["unsupported_groups"] == [
+        "X25519Kyber768Draft00",
+        "SecP256r1Kyber768Draft00",
+    ]
 
 
 def test_run_scan_round_uses_single_explicit_group(monkeypatch):
@@ -153,6 +184,7 @@ def test_run_scan_round_uses_single_explicit_group(monkeypatch):
     monkeypatch.setattr(settings, "rate_limit_delay_s", 0)
     monkeypatch.setattr(scheduler_module, "upsert_target", lambda target: 1)
     monkeypatch.setattr(scheduler_module, "insert_scan", lambda target_id, result: 1)
+    monkeypatch.setattr(scheduler_module, "update_scanner_capabilities", lambda **kwargs: None)
 
     def fake_scan_target(
         hostname,
@@ -193,4 +225,21 @@ def test_run_scan_round_rejects_non_openssl_targeted_probe(monkeypatch):
     monkeypatch.setattr(settings, "scan_client", "python")
 
     with pytest.raises(ValueError, match="require scan_client='openssl'"):
+        scheduler_module.run_scan_round(targets=[Target(hostname="cloudflare.com")])
+
+
+def test_run_scan_round_fails_before_target_work_when_openssl_query_fails(monkeypatch):
+    monkeypatch.setattr(settings, "scan_client", "openssl")
+    monkeypatch.setattr(
+        scheduler_module,
+        "discover_openssl_capabilities",
+        lambda: (_ for _ in ()).throw(RuntimeError("OpenSSL capability query failed")),
+    )
+    monkeypatch.setattr(
+        scheduler_module,
+        "scan_target",
+        lambda *args, **kwargs: pytest.fail("target work must not start"),
+    )
+
+    with pytest.raises(RuntimeError, match="capability query failed"):
         scheduler_module.run_scan_round(targets=[Target(hostname="cloudflare.com")])

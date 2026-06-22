@@ -47,6 +47,7 @@ Target sites (the web)
 |---|---|
 | Python 3.11+ | Managed with [uv](https://github.com/astral-sh/uv) |
 | `tcpdump` | Must be on PATH; process needs `CAP_NET_RAW` or root |
+| OpenSSL 4.0.1 | Pinned and built into the Docker image for current PQC TLS groups |
 | PCAP Analyser (`pcap-analyzer`) | Optional at runtime — pcap files are always stored for retrospective analysis |
 
 ---
@@ -75,12 +76,23 @@ docker compose up -d
 docker compose logs -f observatory
 ```
 
-The scanner runs one weekly round with one forced TLS handshake per configured
-PQC group and target. By default that is nine handshakes per target each week.
+The scanner runs one weekly round with one forced TLS handshake per locally
+supported PQC group and target. The default configuration contains nine groups;
+OpenSSL 4.0.1 supports seven of them, so each target receives seven handshakes.
 The round starts Sunday at 08:00 Europe/Berlin, and the named timezone keeps it
 at local 08:00 across summer/winter daylight saving time changes. The container is granted
 `CAP_NET_RAW` capability, which allows `tcpdump` to capture packets without
 running as root.
+
+The Docker image builds OpenSSL 4.0.1 from its checksum-verified official source
+archive. Seven current groups are probed over the network. The two obsolete
+Kyber Draft00 groups are retained in configuration but skipped because current
+OpenSSL does not implement them. Confirm the image's effective capabilities with:
+
+```bash
+docker compose run --rm observatory openssl version
+docker compose run --rm observatory openssl list -tls1_3 -tls-groups
+```
 
 ---
 
@@ -131,7 +143,7 @@ All settings can be overridden via environment variables (prefix
 | `OBSERVATORY_RATE_LIMIT_DELAY_S` | `1.0` | Minimum gap between consecutive scans |
 | `OBSERVATORY_MAX_CONCURRENT_SCANS` | `5` | Thread pool size |
 | `OBSERVATORY_SCAN_CLIENT` | `openssl` | TLS client used for the scheduled probe |
-| `OBSERVATORY_PQC_PROBE_GROUPS` | All registered PQC groups | Comma-separated groups; each group produces one forced TLS handshake per target during the weekly round |
+| `OBSERVATORY_PQC_PROBE_GROUPS` | All registered PQC groups | Comma-separated groups; each locally supported group produces one forced TLS handshake per target during the weekly round |
 | `OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK` | `sun` | Day of week for the weekly scan |
 | `OBSERVATORY_SCAN_SCHEDULE_HOUR` | `8` | Hour in the configured timezone |
 | `OBSERVATORY_SCAN_SCHEDULE_MINUTE` | `0` | Minute in the configured timezone |
@@ -162,6 +174,8 @@ To add a host, append an entry to the YAML file and run
 The observatory stores its state in a single JSON file with top-level keys:
 
 - `version` — file format version
+- `scanner_capabilities` — the OpenSSL version and the configured, supported,
+  and locally unsupported TLS groups from the latest capability check
 - `next_target_id` / `next_scan_id` — monotonically increasing numeric IDs
 - `targets` — configured targets plus metadata such as category and activation
 - `scans` — append-only scan history with analyzer output and indexed summary fields
@@ -178,7 +192,8 @@ The observatory is designed to be a good citizen:
 - **Rate limiting** — a configurable minimum delay (`OBSERVATORY_RATE_LIMIT_DELAY_S`)
   between consecutive scans.
 - **Weekly cadence** — each configured group is probed once per target in a
-  single weekly round; the default is nine TLS handshakes per target per week.
+  single weekly round when locally supported; the default is seven TLS
+  handshakes per target per week.
 - **Identified User-Agent** — the HTTP request used to complete the handshake
   includes a descriptive `User-Agent` header with a project URL.
 - **Read-only** — only the public TLS negotiation is observed; no application
@@ -187,9 +202,11 @@ The observatory is designed to be a good citizen:
   internet ranges.
 
 Each probe relies on the installed OpenSSL recognizing its configured group
-name. A local "unknown group" failure means that the scanner cannot test that
-group; it does not show that the remote server lacks support. This is especially
-likely for obsolete pre-standard Kyber groups on current OpenSSL releases.
+name. Before every round, the observatory queries OpenSSL locally and stores the
+result in `scanner_capabilities`. Unsupported groups are skipped without DNS,
+packet capture, or target traffic and do not create target scan records. A
+server-side rejection is recorded only after a locally supported group was
+actually offered to that target.
 
 ---
 

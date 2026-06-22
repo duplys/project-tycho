@@ -15,7 +15,7 @@ from observatory.models import HandshakeData, ScanResult, Target
 
 log = logging.getLogger(__name__)
 
-_STORE_VERSION = 1
+_STORE_VERSION = 2
 _LOCK = RLock()
 
 
@@ -24,6 +24,7 @@ def _empty_store() -> dict[str, Any]:
         "version": _STORE_VERSION,
         "next_target_id": 1,
         "next_scan_id": 1,
+        "scanner_capabilities": None,
         "targets": [],
         "scans": [],
     }
@@ -60,9 +61,10 @@ def _load_store(storage_file: Path | None = None) -> dict[str, Any]:
         data = json.load(fh)
     if not isinstance(data, dict):
         raise ValueError(f"Invalid observatory data file: expected object at {path}")
-    data.setdefault("version", _STORE_VERSION)
+    data["version"] = _STORE_VERSION
     data.setdefault("next_target_id", 1)
     data.setdefault("next_scan_id", 1)
+    data.setdefault("scanner_capabilities", None)
     data.setdefault("targets", [])
     data.setdefault("scans", [])
     return data
@@ -78,8 +80,31 @@ def _write_store(data: dict[str, Any], storage_file: Path | None = None) -> None
 def apply_schema() -> None:
     """Create the observatory data file if it does not already exist."""
     with _LOCK:
-        _ensure_store_file()
+        data = _load_store()
+        _write_store(data)
     log.info("Observatory data file ready.")
+
+
+def update_scanner_capabilities(
+    *,
+    checked_at: datetime,
+    client_version: str,
+    configured_groups: list[str],
+    supported_groups: list[str],
+    unsupported_groups: list[str],
+) -> None:
+    """Persist scanner capabilities without adding target scan records."""
+    with _LOCK:
+        data = _load_store()
+        data["scanner_capabilities"] = {
+            "checked_at": checked_at.isoformat(),
+            "client": "openssl",
+            "version": client_version,
+            "configured_groups": configured_groups,
+            "supported_groups": supported_groups,
+            "unsupported_groups": unsupported_groups,
+        }
+        _write_store(data)
 
 
 def upsert_target(target: Target) -> int:

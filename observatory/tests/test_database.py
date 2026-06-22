@@ -11,9 +11,11 @@ from observatory.database import (
     get_latest_scan_per_target,
     get_pqc_adoption_over_time,
     insert_scan,
+    update_scanner_capabilities,
     upsert_target,
 )
 from observatory.models import HandshakeData, ScanResult, Target
+from observatory.probes import DEFAULT_PQC_PROBE_GROUPS
 from observatory.scheduler import sync_targets_to_store
 
 
@@ -33,9 +35,30 @@ def test_apply_schema_creates_json_store(isolated_storage):
 
     assert storage_file.exists()
     data = json.loads(storage_file.read_text(encoding="utf-8"))
-    assert data["version"] == 1
+    assert data["version"] == 2
+    assert data["scanner_capabilities"] is None
     assert data["targets"] == []
     assert data["scans"] == []
+
+
+def test_apply_schema_migrates_v1_store_without_losing_history(isolated_storage):
+    storage_file, _ = isolated_storage
+    existing = {
+        "version": 1,
+        "next_target_id": 2,
+        "next_scan_id": 2,
+        "targets": [{"id": 1, "hostname": "example.com", "port": 443}],
+        "scans": [{"id": 1, "target_id": 1, "scanned_at": "2026-06-01T08:00:00+00:00"}],
+    }
+    storage_file.write_text(json.dumps(existing), encoding="utf-8")
+
+    apply_schema()
+
+    migrated = json.loads(storage_file.read_text(encoding="utf-8"))
+    assert migrated["version"] == 2
+    assert migrated["scanner_capabilities"] is None
+    assert migrated["targets"] == existing["targets"]
+    assert migrated["scans"] == existing["scans"]
 
 
 def test_file_store_query_helpers(isolated_storage):
@@ -111,6 +134,38 @@ def test_file_store_query_helpers(isolated_storage):
 
     data = json.loads(settings.storage_file.read_text(encoding="utf-8"))
     assert data["scans"][0]["probe_group"] == "X25519MLKEM768"
+
+
+def test_scanner_capabilities_do_not_change_target_scan_history(isolated_storage):
+    apply_schema()
+    target_id = upsert_target(Target(hostname="cloudflare.com", category="cdn"))
+    scanned_at = datetime(2026, 6, 21, 8, 0, tzinfo=UTC)
+    insert_scan(
+        target_id,
+        ScanResult(
+            target_hostname="cloudflare.com",
+            target_port=443,
+            scanned_at=scanned_at,
+            probe_group="X25519MLKEM768",
+            handshake=HandshakeData(selected_group="X25519MLKEM768", is_pqc=True),
+        ),
+    )
+
+    update_scanner_capabilities(
+        checked_at=datetime(2026, 6, 22, 8, 0, tzinfo=UTC),
+        client_version="OpenSSL 4.0.1 9 Jun 2026",
+        configured_groups=list(DEFAULT_PQC_PROBE_GROUPS),
+        supported_groups=list(DEFAULT_PQC_PROBE_GROUPS[:-2]),
+        unsupported_groups=list(DEFAULT_PQC_PROBE_GROUPS[-2:]),
+    )
+
+    data = json.loads(settings.storage_file.read_text(encoding="utf-8"))
+    assert len(data["scans"]) == 1
+    assert data["scanner_capabilities"]["version"] == "OpenSSL 4.0.1 9 Jun 2026"
+    assert data["scanner_capabilities"]["unsupported_groups"] == list(
+        DEFAULT_PQC_PROBE_GROUPS[-2:]
+    )
+    assert get_latest_scan_per_target()[0]["scanned_at"] == scanned_at
 
 
 def test_sync_targets_to_store_deactivates_removed_targets(isolated_storage):

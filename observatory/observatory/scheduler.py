@@ -28,10 +28,11 @@ from observatory.database import (
     apply_schema,
     get_active_targets,
     insert_scan,
+    update_scanner_capabilities,
     upsert_target,
 )
 from observatory.models import HandshakeData, ScanResult, Target
-from observatory.scanner import capture_tls_handshake
+from observatory.scanner import capture_tls_handshake, discover_openssl_capabilities
 from observatory.targets import load_targets
 
 log = logging.getLogger(__name__)
@@ -140,6 +141,29 @@ def run_scan_round(
         groups_to_probe = list(probe_groups or settings.pqc_probe_groups)
     if groups_to_probe and scan_client != "openssl":
         raise ValueError("Targeted PQC/hybrid probes require scan_client='openssl'.")
+
+    if scan_client == "openssl":
+        capabilities = discover_openssl_capabilities()
+        implemented = {group.casefold() for group in capabilities.implemented_groups}
+        configured_groups = groups_to_probe
+        groups_to_probe = [
+            group for group in configured_groups if group.casefold() in implemented
+        ]
+        unsupported_groups = [
+            group for group in configured_groups if group.casefold() not in implemented
+        ]
+        update_scanner_capabilities(
+            checked_at=datetime.now(timezone.utc),
+            client_version=capabilities.version,
+            configured_groups=configured_groups,
+            supported_groups=groups_to_probe,
+            unsupported_groups=unsupported_groups,
+        )
+        if unsupported_groups:
+            log.warning(
+                "Skipping TLS groups unsupported by the local OpenSSL client: %s",
+                ", ".join(unsupported_groups),
+            )
 
     if targets is None:
         stored_targets = get_active_targets()

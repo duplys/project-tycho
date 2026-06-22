@@ -26,6 +26,7 @@ import socket
 import ssl
 import subprocess
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -47,6 +48,16 @@ _TCPDUMP_TERMINATE_TIMEOUT_S = 5
 
 # Extra grace window added on top of network timeout for external TLS clients.
 _EXTERNAL_TLS_TIMEOUT_GRACE_S = 5
+
+_OPENSSL_QUERY_TIMEOUT_S = 10
+
+
+@dataclass(frozen=True)
+class OpenSSLCapabilities:
+    """Version and TLS 1.3 groups implemented by the active OpenSSL binary."""
+
+    version: str
+    implemented_groups: frozenset[str]
 
 
 def _safe_filename_part(value: str) -> str:
@@ -72,6 +83,47 @@ def _tcpdump_available() -> bool:
 
 def _openssl_available() -> bool:
     return shutil.which("openssl") is not None
+
+
+def _run_openssl_query(*args: str) -> str:
+    """Run a local OpenSSL metadata query or raise a diagnostic error."""
+    openssl_path = shutil.which("openssl")
+    if openssl_path is None:
+        raise RuntimeError(
+            "OpenSSL client not found on PATH. Install openssl to use "
+            "scan_client='openssl'."
+        )
+
+    try:
+        result = subprocess.run(
+            [openssl_path, *args],
+            capture_output=True,
+            text=True,
+            timeout=_OPENSSL_QUERY_TIMEOUT_S,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"OpenSSL capability query failed: {exc}") from exc
+
+    if result.returncode != 0:
+        details = (result.stderr or result.stdout or "unknown error").strip()
+        raise RuntimeError(f"OpenSSL capability query failed: {details}")
+    return result.stdout.strip()
+
+
+def parse_openssl_tls_groups(output: str) -> frozenset[str]:
+    """Parse colon- or whitespace-delimited output from ``openssl list``."""
+    return frozenset(part for part in re.split(r"[:\s]+", output.strip()) if part)
+
+
+def discover_openssl_capabilities() -> OpenSSLCapabilities:
+    """Return the active OpenSSL version and its implemented TLS 1.3 groups."""
+    version = _run_openssl_query("version")
+    group_output = _run_openssl_query("list", "-tls1_3", "-tls-groups")
+    groups = parse_openssl_tls_groups(group_output)
+    if not groups:
+        raise RuntimeError("OpenSSL capability query returned no TLS 1.3 groups")
+    return OpenSSLCapabilities(version=version, implemented_groups=groups)
 
 
 def _perform_python_tls_handshake(
