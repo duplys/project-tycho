@@ -1,11 +1,11 @@
 """Configuration — loaded from environment variables (prefix: OBSERVATORY_)."""
 
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from observatory.probes import DEFAULT_PQC_PROBE_GROUPS
 
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # Optional openssl -groups value for explicit named-group advertisement.
     openssl_groups: str | None = None
     # Targeted PQC/hybrid OpenSSL groups probed for every active target.
-    pqc_probe_groups: list[str] = list(DEFAULT_PQC_PROBE_GROUPS)
+    pqc_probe_groups: Annotated[list[str], NoDecode] = list(DEFAULT_PQC_PROBE_GROUPS)
 
     # ------------------------------------------------------------------ #
     # Scheduler                                                            #

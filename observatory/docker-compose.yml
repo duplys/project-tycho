@@ -16,6 +16,12 @@ services:
     environment:
       # Override any setting via environment variable or an .env file.
       # e.g. OBSERVATORY_SCAN_SCHEDULE_HOUR=3
+      OBSERVATORY_SCAN_CLIENT: ${OBSERVATORY_SCAN_CLIENT:-openssl}
+      OBSERVATORY_PQC_PROBE_GROUPS: ${OBSERVATORY_PQC_PROBE_GROUPS:-X25519MLKEM768}
+      OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK: ${OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK:-sun}
+      OBSERVATORY_SCAN_SCHEDULE_HOUR: ${OBSERVATORY_SCAN_SCHEDULE_HOUR:-8}
+      OBSERVATORY_SCAN_SCHEDULE_MINUTE: ${OBSERVATORY_SCAN_SCHEDULE_MINUTE:-0}
+      OBSERVATORY_SCAN_SCHEDULE_TIMEZONE: ${OBSERVATORY_SCAN_SCHEDULE_TIMEZONE:-Europe/Berlin}
     volumes:
       # Persistent pcap archive.  Mount a host directory here in production.
       - pcap_store:/var/pqc-obs/captures

@@ -84,9 +84,11 @@ def test_start_scheduler_registers_weekly_berlin_job_without_startup_scan(
     assert kwargs["minute"] == 0
     assert kwargs["timezone"] == ZoneInfo("Europe/Berlin")
     assert kwargs["id"] == "weekly_scan"
+    assert kwargs["max_instances"] == 1
+    assert kwargs["coalesce"] is True
 
 
-def test_run_scan_round_probes_default_pqc_groups(monkeypatch):
+def test_run_scan_round_probes_each_target_once_by_default(monkeypatch):
     calls = []
 
     monkeypatch.setattr(settings, "scan_client", "openssl")
@@ -126,6 +128,8 @@ def test_run_scan_round_probes_default_pqc_groups(monkeypatch):
 
     scheduler_module.run_scan_round(targets=[Target(hostname="cloudflare.com")])
 
+    assert DEFAULT_PQC_PROBE_GROUPS == ("X25519MLKEM768",)
+    assert len(calls) == 1
     assert [call["openssl_groups"] for call in calls] == list(DEFAULT_PQC_PROBE_GROUPS)
     assert [call["probe_group"] for call in calls] == list(DEFAULT_PQC_PROBE_GROUPS)
     assert {call["scan_client"] for call in calls} == {"openssl"}
@@ -178,5 +182,5 @@ def test_run_scan_round_uses_single_explicit_group(monkeypatch):
 def test_run_scan_round_rejects_non_openssl_targeted_probe(monkeypatch):
     monkeypatch.setattr(settings, "scan_client", "python")
 
-    with pytest.raises(ValueError, match="requires scan_client='openssl'"):
+    with pytest.raises(ValueError, match="require scan_client='openssl'"):
         scheduler_module.run_scan_round(targets=[Target(hostname="cloudflare.com")])

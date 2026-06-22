@@ -64,6 +64,8 @@ OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK=sun
 OBSERVATORY_SCAN_SCHEDULE_HOUR=8
 OBSERVATORY_SCAN_SCHEDULE_MINUTE=0
 OBSERVATORY_SCAN_SCHEDULE_TIMEZONE=Europe/Berlin
+OBSERVATORY_SCAN_CLIENT=openssl
+OBSERVATORY_PQC_PROBE_GROUPS=X25519MLKEM768
 EOF
 
 # 3. Build and start.
@@ -73,9 +75,9 @@ docker compose up -d
 docker compose logs -f observatory
 ```
 
-The scanner repeats weekly at the configured local time. The default is Sunday
-08:00 Europe/Berlin, and the named timezone keeps the scan at local 08:00 across
-summer/winter daylight saving time changes. The container is granted
+The scanner runs one `X25519MLKEM768` TLS probe per target each week. The
+default is Sunday 08:00 Europe/Berlin, and the named timezone keeps the scan at
+local 08:00 across summer/winter daylight saving time changes. The container is granted
 `CAP_NET_RAW` capability, which allows `tcpdump` to capture packets without
 running as root.
 
@@ -127,6 +129,8 @@ All settings can be overridden via environment variables (prefix
 | `OBSERVATORY_SCAN_TIMEOUT_S` | `15` | Per-host TLS timeout (seconds) |
 | `OBSERVATORY_RATE_LIMIT_DELAY_S` | `1.0` | Minimum gap between consecutive scans |
 | `OBSERVATORY_MAX_CONCURRENT_SCANS` | `5` | Thread pool size |
+| `OBSERVATORY_SCAN_CLIENT` | `openssl` | TLS client used for the scheduled probe |
+| `OBSERVATORY_PQC_PROBE_GROUPS` | `X25519MLKEM768` | Comma-separated groups; each additional group adds another TLS scan per target |
 | `OBSERVATORY_SCAN_SCHEDULE_DAY_OF_WEEK` | `sun` | Day of week for the weekly scan |
 | `OBSERVATORY_SCAN_SCHEDULE_HOUR` | `8` | Hour in the configured timezone |
 | `OBSERVATORY_SCAN_SCHEDULE_MINUTE` | `0` | Minute in the configured timezone |

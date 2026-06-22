@@ -249,6 +249,8 @@ def start_scheduler() -> None:
         timezone=schedule_timezone,
         id="weekly_scan",
         name="Weekly PQC Observatory scan",
+        max_instances=1,
+        coalesce=True,
         misfire_grace_time=3600,  # allow up to 1 h if the process was down
     )
 
