@@ -27,6 +27,13 @@ Current scope is a **CLI one-shot MVP** (no built-in scheduler or long-running A
 
 The first three tools compose into a single continuous pipeline on one VPS. The fourth is a deliberate experiment in AI-augmented research workflows.
 
+## Current Limitations
+
+Two Observatory behaviors are important when interpreting current results. These are current implementation limitations, not intended guarantees:
+
+- **Manual single-group probes are not persisted.** Running `observatory scan HOST --openssl-groups GROUP` prints the probe result to stdout, but it does not append a scan row to the Observatory JSON store. These ad-hoc probes therefore do not appear in status output, scan history, Visualiser dashboards, or adoption calculations.
+- **Per-host probe results are persisted only after that host's full group sequence finishes.** During scheduled rounds, completed probes for a target are kept in memory until all locally supported groups for that target have been attempted. If the process stops mid-target, those completed probes are lost from the JSON history; if an individual write later fails, the stored round can be incomplete and the current reporting layer cannot distinguish that from a complete round.
+
 Quick start:
 
 ```bash
