@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="{{ author }}">
+    <meta name="description" content="{{ description }}">
+    <title>{% block title %}{{ title }}{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1><a href="/">{{ title }}</a></h1>
+        <p class="subtitle">{{ description }}</p>
+        <nav>
+            <a href="/">Home</a>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+    <footer>
+        <p>Generated {{ generated_at }} — <a href="https://github.com/duplys/project-tycho">Project Tycho</a></p>
+    </footer>
+</body>
+</html>

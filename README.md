@@ -25,7 +25,11 @@ The `researcher/` tool is an AI-powered agent (LangChain + LangGraph) that combi
 
 Current scope is a **CLI one-shot MVP** (no built-in scheduler or long-running API service yet).
 
-The first three tools compose into a single continuous pipeline on one VPS. The fourth is a deliberate experiment in AI-augmented research workflows.
+### Blog
+
+The `blog/` service is a static site generator and HTTP API that accepts research posts from the Researcher agent, converts Markdown to HTML via Jinja2 templates, and serves the resulting blog site. Posts are stored as JSON files in a persistent volume and rendered on demand.
+
+The first three tools compose into a single continuous pipeline on one VPS. The fourth is a deliberate experiment in AI-augmented research workflows. The fifth serves as the content publication layer.
 
 ## Current Limitations
 
@@ -56,6 +60,7 @@ This builds and starts:
 
 - **Observatory** – scans TLS handshakes on a weekly schedule and writes results to a shared volume (`observatory_data`). Requires `NET_RAW` capability so `tcpdump` can capture packets.
 - **Visualiser** – serves the interactive dashboard at <http://localhost:8000>. The Vue.js frontend is built automatically before the backend starts.
+- **Blog** – serves the research blog at <http://localhost:8001>. The Researcher agent publishes posts here.
 
 To also run the one-shot Researcher agent (requires an OpenAI API key):
 
@@ -73,6 +78,54 @@ docker compose --profile research run --rm researcher
 ```
 
 When running from the root `docker-compose.yml`, keep service settings in a single repository-root `.env` file. Docker Compose reads this file and passes the relevant values to each service.
+
+### Publishing a weekly blog post
+
+The Researcher agent can auto-generate and publish a blog post covering the
+last 7 days of Observatory data to the Blog service. First ensure all services
+are running:
+
+```bash
+docker compose up -d
+```
+
+Then trigger a weekly blog post generation:
+
+```bash
+OPENAI_API_KEY=sk-... docker compose --profile research run --rm researcher blog-weekly
+```
+
+This command:
+
+1. Collects the last 7 days of TLS scan data from the Observatory
+2. Retrieves matching reference snippets from the mounted `.tex`/`.md`/`.txt` files
+3. Generates visual TikZ assets via the Visualiser
+4. Drafts, critiques, and finalizes a blog-formatted Markdown post
+5. Publishes the post to the Blog service via `POST /api/posts`
+6. Triggers a static site rebuild via `POST /api/rebuild`
+
+The blog is available at <http://localhost:8001>.
+
+On a VPS, schedule it with cron to run every Monday morning (after the Sunday
+Observatory scan):
+
+```
+0 9 * * 1 cd /srv/project-tycho && OPENAI_API_KEY=sk-... docker compose --profile research run --rm researcher blog-weekly
+```
+
+#### Customizing the blog's tone and topics
+
+Create a system prompt file (see `system-prompts/blog-prompt.txt` for an
+example) and mount it:
+
+```bash
+OPENAI_API_KEY=sk-... \
+  RESEARCHER_BLOG_SYSTEM_PROMPT_FILE=/var/pqc-obs/system-prompts/blog-prompt.txt \
+  docker compose --profile research run --rm researcher blog-weekly
+```
+
+The default mount is `./system-prompts:/var/pqc-obs/system-prompts:ro`, so
+editing `system-prompts/blog-prompt.txt` in the repository is enough.
 
 ## Deploying PCAP Analyser, Visualiser, and Observatory on a Hetzner VPS
 
@@ -402,6 +455,7 @@ This builds images from the repository and starts:
 
 - **Observatory** – runs the periodic TLS scanner. Pcap captures and scan results are written to Docker-managed named volumes (`pcap_store`, `observatory_data`). Granted `NET_RAW` capability so `tcpdump` can capture packets without running as root.
 - **Visualiser** – serves the interactive dashboard at <http://localhost:8000>. The Vue.js frontend is built automatically by the `visualiser-frontend` helper service before the backend starts.
+- **Blog** – serves the research blog at <http://localhost:8001>. Posts are published by the Researcher agent.
 
 Verify both services are up:
 
@@ -474,10 +528,15 @@ docker compose -f /srv/project-tycho/docker-compose.yml logs -f
 # Follow a single service
 docker compose -f /srv/project-tycho/docker-compose.yml logs -f observatory
 docker compose -f /srv/project-tycho/docker-compose.yml logs -f visualiser
+docker compose -f /srv/project-tycho/docker-compose.yml logs -f blog
 
 # Run the one-shot Researcher agent
 OPENAI_API_KEY=sk-... docker compose -f /srv/project-tycho/docker-compose.yml \
   --profile research run --rm researcher
+
+# Publish a weekly blog post
+OPENAI_API_KEY=sk-... docker compose -f /srv/project-tycho/docker-compose.yml \
+  --profile research run --rm researcher blog-weekly
 ```
 
 #### Extracting Tool 1 JSON for Visualiser

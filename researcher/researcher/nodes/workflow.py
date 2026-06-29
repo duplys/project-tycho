@@ -133,25 +133,42 @@ def collect_references_node(state: dict[str, Any], deps: Any) -> dict[str, Any]:
 
 
 def draft_node(state: dict[str, Any], deps: Any) -> dict[str, Any]:
+    system_prompt = (
+        "You draft concise technical research text about PQC adoption in TLS. "
+        "Every major claim must be grounded in supplied evidence."
+    )
+    blog_prompt_override = state.get("blog_system_prompt")
+    if blog_prompt_override:
+        system_prompt = blog_prompt_override
+
+    human_template = (
+        "Create a {output_type} draft on topic: {topic}\n\n"
+        "Observatory context:\n{observatory_context}\n\n"
+        "Visualiser context:\n{visualiser_context}\n\n"
+        "Reference snippets:\n{references}\n\n"
+        "Available visual artifacts:\n{visual_artifacts}\n\n"
+        "Output markdown with sections:\n"
+        "1) Title\n2) Executive summary\n3) Evidence-based findings\n"
+        "4) Interpretation grounded in references\n5) Suggested figure placements\n"
+        "6) Caveats and uncertainty\n"
+    )
+    if blog_prompt_override:
+        human_template = (
+            "Create a blog post on topic: {topic}\n\n"
+            "Observatory data (this week):\n{observatory_context}\n\n"
+            "Visualiser data:\n{visualiser_context}\n\n"
+            "Reference material:\n{references}\n\n"
+            "Visual artifacts:\n{visual_artifacts}\n\n"
+            "Write an engaging, accessible blog post that explains the latest "
+            "PQC TLS adoption trends. Use clear headings, concrete data points, "
+            "and cite specific sources. Structure with a compelling lede, "
+            "body sections with evidence, and a forward-looking conclusion.\n"
+        )
+
     prompt = ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                "You draft concise technical research text about PQC adoption in TLS. "
-                "Every major claim must be grounded in supplied evidence.",
-            ),
-            (
-                "human",
-                "Create a {output_type} draft on topic: {topic}\n\n"
-                "Observatory context:\n{observatory_context}\n\n"
-                "Visualiser context:\n{visualiser_context}\n\n"
-                "Reference snippets:\n{references}\n\n"
-                "Available visual artifacts:\n{visual_artifacts}\n\n"
-                "Output markdown with sections:\n"
-                "1) Title\n2) Executive summary\n3) Evidence-based findings\n"
-                "4) Interpretation grounded in references\n5) Suggested figure placements\n"
-                "6) Caveats and uncertainty\n",
-            ),
+            ("system", system_prompt),
+            ("human", human_template),
         ]
     )
     messages = prompt.format_messages(

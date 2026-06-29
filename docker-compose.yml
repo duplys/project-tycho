@@ -87,10 +87,13 @@ services:
       RESEARCHER_REFERENCE_CHUNK_SIZE: ${RESEARCHER_REFERENCE_CHUNK_SIZE:-1800}
       RESEARCHER_REFERENCE_CHUNK_OVERLAP: ${RESEARCHER_REFERENCE_CHUNK_OVERLAP:-200}
       RESEARCHER_MAX_VISUALIZATIONS: ${RESEARCHER_MAX_VISUALIZATIONS:-3}
+      RESEARCHER_BLOG_BASE_URL: ${RESEARCHER_BLOG_BASE_URL:-http://blog:8001}
+      RESEARCHER_BLOG_SYSTEM_PROMPT_FILE: ${RESEARCHER_BLOG_SYSTEM_PROMPT_FILE:-/var/pqc-obs/system-prompts/blog-prompt.txt}
     volumes:
       - observatory_data:/var/pqc-obs/data:ro
       - researcher_references:/var/pqc-obs/references:ro
       - researcher_output:/var/pqc-obs/researcher-output
+      - ./system-prompts:/var/pqc-obs/system-prompts:ro
     command:
       - run
       - --topic
@@ -98,7 +101,26 @@ services:
       - --output-type
       - ${RESEARCHER_OUTPUT_TYPE:-research-summary}
     depends_on:
-      - visualiser
+      visualiser:
+        condition: service_started
+      blog:
+        condition: service_started
+
+  # ===========================================================================
+  # Blog (static site + API for publishing research posts)
+  # ===========================================================================
+  blog:
+    build:
+      context: .
+      dockerfile: blog/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      BLOG_POSTS_DIR: ${BLOG_POSTS_DIR:-/var/pqc-obs/blog-posts}
+      BLOG_SITE_DIR: ${BLOG_SITE_DIR:-/var/pqc-obs/blog-site}
+    volumes:
+      - blog_posts:/var/pqc-obs/blog-posts
+      - blog_site:/var/pqc-obs/blog-site
 
 volumes:
   pcap_store:
@@ -106,3 +128,5 @@ volumes:
   frontend_dist:
   researcher_references:
   researcher_output:
+  blog_posts:
+  blog_site:
