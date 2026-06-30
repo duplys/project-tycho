@@ -463,15 +463,17 @@ Verify both services are up:
 docker compose ps
 ```
 
-### 5. Put the Visualiser behind Nginx
+### 5. Put the Visualiser and Blog behind Nginx
 
-The Visualiser binds to port 8000 on the host. Install Nginx with:
+The Visualiser binds to port 8000 and the Blog to port 8001 on the host.
+Install Nginx with:
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Create the reverse-proxy site at `/etc/nginx/sites-available/project-tycho` (replace `tycho.example.com` with your real domain):
+Create the reverse-proxy site at `/etc/nginx/sites-available/project-tycho`
+(replace `tycho.example.com` with your real domain):
 
 ```nginx
 server {
@@ -480,6 +482,15 @@ server {
 
     location / {
         proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /blog/ {
+        rewrite ^/blog(/.*)$ $1 break;
+        proxy_pass http://127.0.0.1:8001;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
