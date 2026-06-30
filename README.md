@@ -313,7 +313,7 @@ sudo systemctl status tycho-observatory
 
 ### 5. Put Visualiser behind Nginx
 
-Create `/etc/nginx/sites-available/project-tycho`:
+Create `/etc/nginx/sites-available/vier99.de`:
 
 Replace `tycho.example.com` with your real domain name.
 
@@ -335,7 +335,7 @@ server {
 Enable the site:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/project-tycho /etc/nginx/sites-enabled/project-tycho
+sudo ln -s /etc/nginx/sites-available/vier99.de /etc/nginx/sites-enabled/vier99.de
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -472,16 +472,19 @@ Install Nginx with:
 sudo apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Create the reverse-proxy site at `/etc/nginx/sites-available/project-tycho`
-(replace `tycho.example.com` with your real domain):
+Add a server block to `/etc/nginx/sites-available/vier99.de`
+(replace `tycho.example.com` with your real domain). Both the Visualiser
+and Blog **must live in the same server block** — two separate blocks for
+the same `server_name` means nginx only routes to the first one.
 
 ```nginx
+# Project Tycho
 server {
-    listen 80;
     server_name tycho.example.com;
 
     location / {
         proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -496,16 +499,20 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    ssl_certificate /etc/letsencrypt/live/tycho.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/tycho.example.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 }
 ```
 
-If you already have other Nginx sites on the VPS, keep Project Tycho in its own
-vhost file and give it its own certificate. The TLS block for
-`project-tycho.vier99.de` should point at:
+If Certbot has not yet issued a certificate for this domain, run:
 
-```text
-/etc/letsencrypt/live/project-tycho.vier99.de/fullchain.pem
-/etc/letsencrypt/live/project-tycho.vier99.de/privkey.pem
+```bash
+sudo certbot --nginx -d tycho.example.com
 ```
 
 Do not reuse another site's certificate path unless that certificate already
@@ -526,7 +533,7 @@ Enable the site and add HTTPS with Let's Encrypt:
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
-sudo ln -s /etc/nginx/sites-available/project-tycho /etc/nginx/sites-enabled/project-tycho
+sudo ln -s /etc/nginx/sites-available/vier99.de /etc/nginx/sites-enabled/vier99.de
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

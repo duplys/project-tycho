@@ -147,7 +147,7 @@ location /blog/ {
 }
 ```
 
-Then `nginx -t && nginx -s reload`, and https://tycho.vier99.de/blog/ will work. Note that `BLOG_SITE_DIR` must also be rebuilt after each publish so the rewritten paths match the /blog/ prefix.
+Then `nginx -t && nginx -s reload` (or `sudo nginx -t && sudo systemctl reload nginx`), and https://tycho.vier99.de/blog/ will work. Note that `BLOG_SITE_DIR` must also be rebuilt after each publish so the rewritten paths match the /blog/ prefix.
 
 Note: when mounted under a sub-path, update `BLOG_SITE_DIR` and rebuild after
 each publish cycle.
