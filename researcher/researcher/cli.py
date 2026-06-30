@@ -6,6 +6,7 @@ import click
 
 from researcher.config import ResearcherSettings
 from researcher.connectors import (
+    BlogConnector,
     ObservatoryConnector,
     ReferenceRetriever,
     VisualiserConnector,
@@ -47,12 +48,26 @@ def main() -> None:
     default=None,
     help="Maximum number of scan-derived visualizations to export.",
 )
+@click.option(
+    "--publish-to-blog",
+    is_flag=True,
+    default=False,
+    help="Upload the final draft to the blog service and trigger a site rebuild.",
+)
+@click.option(
+    "--blog-system-prompt",
+    type=click.Path(path_type=Path, file_okay=True, dir_okay=False, exists=True),
+    default=None,
+    help="Path to a file containing a custom system prompt for blog post generation.",
+)
 def run(
     topic: str,
     output_type: str,
     since: str | None,
     output_dir: Path | None,
     max_visualizations: int | None,
+    publish_to_blog: bool,
+    blog_system_prompt: Path | None,
 ) -> None:
     settings = ResearcherSettings()
     if output_dir is not None:
@@ -74,6 +89,17 @@ def run(
     )
     llm = build_llm(settings=settings)
 
+    blog = None
+    blog_system_prompt_text = None
+    if publish_to_blog:
+        blog = BlogConnector(
+            base_url=settings.blog_base_url,
+            timeout_s=settings.http_timeout_s,
+        )
+        prompt_path = blog_system_prompt or settings.blog_system_prompt_file
+        if prompt_path and prompt_path.exists():
+            blog_system_prompt_text = prompt_path.read_text(encoding="utf-8").strip()
+
     graph = build_research_graph(
         deps=GraphDependencies(
             settings=settings,
@@ -81,6 +107,7 @@ def run(
             visualiser=visualiser,
             references=references,
             llm=llm,
+            blog=blog,
         )
     )
 
@@ -90,11 +117,49 @@ def run(
             "output_type": output_type,
             "since": since,
             "max_visualizations": settings.max_visualizations,
+            "blog_system_prompt": blog_system_prompt_text,
         }
     )
-    output_paths = result["output_paths"]
-    click.echo(f"Draft saved to: {output_paths['draft_markdown']}")
-    click.echo(f"Metadata saved to: {output_paths['metadata_json']}")
+    output_paths = result.get("output_paths", {})
+    click.echo(f"Draft saved to: {output_paths.get('draft_markdown', 'N/A')}")
+    click.echo(f"Metadata saved to: {output_paths.get('metadata_json', 'N/A')}")
+    if publish_to_blog:
+        click.echo(f"Blog post published: {result.get('blog_post_url', 'N/A')}")
+
+
+@main.command("blog-weekly")
+@click.option(
+    "--topic",
+    default="Weekly PQC TLS Observatory Analysis",
+    help="Blog post topic.",
+)
+@click.option(
+    "--blog-system-prompt",
+    type=click.Path(
+        path_type=Path, file_okay=True, dir_okay=False, exists=True
+    ),
+    default=None,
+    help="Custom system prompt file for blog generation.",
+)
+def blog_weekly(topic: str, blog_system_prompt: Path | None) -> None:
+    """Generate and publish a weekly blog post (last 7 days of data)."""
+    from datetime import UTC, datetime, timedelta
+
+    week_ago = (datetime.now(UTC) - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    ctx = click.get_current_context()
+    run_cmd = ctx.parent.commands["run"]
+    click.echo(f"Generating weekly blog post (since {week_ago})...")
+    ctx.invoke(
+        run_cmd,
+        topic=topic,
+        output_type="blog-post",
+        since=week_ago,
+        output_dir=None,
+        max_visualizations=None,
+        publish_to_blog=True,
+        blog_system_prompt=blog_system_prompt,
+    )
 
 
 if __name__ == "__main__":

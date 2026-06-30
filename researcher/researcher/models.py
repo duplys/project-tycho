@@ -18,6 +18,15 @@ class ReferenceSnippet(BaseModel):
     excerpt: str
 
 
+class BlogPostPayload(BaseModel):
+    title: str
+    slug: str
+    summary: str
+    tags: list[str] = Field(default_factory=list)
+    markdown_content: str
+    run_id: str | None = None
+
+
 class VisualArtifact(BaseModel):
     kind: str
     filename: str

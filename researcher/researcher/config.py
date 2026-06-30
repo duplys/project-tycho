@@ -27,9 +27,20 @@ class ResearcherSettings(BaseSettings):
     reference_chunk_overlap: int = Field(default=200, ge=0, le=2000)
     max_visualizations: int = Field(default=3, ge=1, le=10)
 
-    @field_validator("observatory_data_file", "reference_dir", "output_dir", mode="before")
+    blog_base_url: str = "http://blog:8001"
+    blog_system_prompt_file: Path | None = None
+
+    @field_validator(
+        "observatory_data_file",
+        "reference_dir",
+        "output_dir",
+        "blog_system_prompt_file",
+        mode="before",
+    )
     @classmethod
-    def _expand_paths(cls, value: str | Path) -> Path:
+    def _expand_paths(cls, value: str | Path | None) -> Path | None:
+        if value is None:
+            return None
         return Path(value).expanduser()
 
 
