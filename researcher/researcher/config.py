@@ -38,7 +38,9 @@ class ResearcherSettings(BaseSettings):
         mode="before",
     )
     @classmethod
-    def _expand_paths(cls, value: str | Path) -> Path:
+    def _expand_paths(cls, value: str | Path | None) -> Path | None:
+        if value is None:
+            return None
         return Path(value).expanduser()
 
 

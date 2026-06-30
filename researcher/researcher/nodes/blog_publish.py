@@ -20,15 +20,14 @@ def _slugify(title: str) -> str:
 
 
 def _extract_summary(markdown: str, max_len: int = 280) -> str:
-    paragraphs = re.findall(r"^(?:#{1,6}\s+.*|.*\S.*)$", markdown, re.MULTILINE)
-    for para in paragraphs:
-        if para.startswith("#"):
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if not stripped:
             continue
-        cleaned = para.strip()
-        if len(cleaned) > 20:
-            if len(cleaned) > max_len:
-                return cleaned[: max_len - 3] + "..."
-            return cleaned
+        if re.match(r"^(#{1,6}\s|```|>|\||[-*+]\s|\d+\.\s)", stripped):
+            continue
+        if len(stripped) > 20:
+            return stripped[: max_len - 3] + "..." if len(stripped) > max_len else stripped
     return markdown[:max_len].strip()
 
 

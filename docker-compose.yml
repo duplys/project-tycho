@@ -101,10 +101,7 @@ services:
       - --output-type
       - ${RESEARCHER_OUTPUT_TYPE:-research-summary}
     depends_on:
-      visualiser:
-        condition: service_started
-      blog:
-        condition: service_started
+      - visualiser
 
   # ===========================================================================
   # Blog (static site + API for publishing research posts)

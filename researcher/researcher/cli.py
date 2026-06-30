@@ -150,11 +150,13 @@ def blog_weekly(topic: str, blog_system_prompt: Path | None) -> None:
     ctx = click.get_current_context()
     run_cmd = ctx.parent.commands["run"]
     click.echo(f"Generating weekly blog post (since {week_ago})...")
-    run_cmd.invoke(
-        ctx,
+    ctx.invoke(
+        run_cmd,
         topic=topic,
         output_type="blog-post",
         since=week_ago,
+        output_dir=None,
+        max_visualizations=None,
         publish_to_blog=True,
         blog_system_prompt=blog_system_prompt,
     )
