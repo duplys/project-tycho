@@ -11,3 +11,7 @@ The production instance runs on a Hetzner VPS reachable at **https://tycho.vier9
 Nginx site config: `/etc/nginx/sites-available/vier99.de` (symlinked to `sites-enabled/vier99.de`).
 
 To deploy changes: `git pull` on the VPS, then `docker compose up --build -d` from `/srv/project-tycho`.
+
+## Collaboration style
+
+Be direct and honest, including when the answer is "don't bother". If a test, abstraction, or feature isn't worth its cost, say so and explain why — don't default to "yes" just because it's technically possible.
