@@ -6,6 +6,7 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 COPY blog/pyproject.toml ./pyproject.toml
+COPY blog/README.md ./README.md
 COPY blog/blog ./blog
 
 RUN uv pip install --system --no-cache .
